@@ -24,47 +24,6 @@ class News
             $this->outputApi = false;
             return;
         }
-
-        try {
-            // get update news from session
-            $update_news = session()->get(Define::SYSTEM_KEY_SESSION_UPDATE_NEWS);
-
-            // if already executed
-            if (isset($update_news)) {
-                $update_news = json_decode($update_news, true);
-                $update_time = array_get($update_news, 'update_time');
-                if (isset($update_time)) {
-                    $update_time = new Carbon($update_time);
-                    if ($update_time->diffInMinutes(Carbon::now()) <= 60) {
-                        $contents = array_get($update_news, 'contents');
-                    }
-                }
-            }
-
-            if (!isset($contents)) {
-                // get update news from api
-                $client = new \GuzzleHttp\Client();
-                $response = $client->request('GET', Define::EXMENT_NEWS_API_URL, [
-                    'http_errors' => false,
-                    'query' => $this->getQuery(),
-                    'timeout' => 3, // Response timeout
-                    'connect_timeout' => 3, // Connection timeout
-                ]);
-        
-                $contents = $response->getBody()->getContents();
-                if ($response->getStatusCode() != 200) {
-                    return null;
-                }
-                session()->put(Define::SYSTEM_KEY_SESSION_UPDATE_NEWS, json_encode([
-                    'update_time' => Carbon::now()->toDateTimeString(),
-                    'contents' => $contents
-                ]));
-            }
-    
-            // get wordpress items
-            $this->items = json_decode($contents, true);
-        } catch (\Exception $ex) {
-        }
     }
 
     /**
@@ -96,6 +55,8 @@ class News
         if (!$this->outputApi) {
             return exmtrans('error.disabled_outside_api');
         }
+
+        $this->setItems();
 
         // get table items
         $headers = [
@@ -136,5 +97,60 @@ class News
         ];
 
         return $query;
+    }
+
+
+    /**
+     * Set exment news items
+     *
+     * @return void
+     */
+    protected function setItems()
+    {
+        if (!\is_nullorempty($this->items)) {
+            return;
+        }
+
+        try {
+            // get update news from session
+            $update_news = session()->get(Define::SYSTEM_KEY_SESSION_UPDATE_NEWS);
+
+            // if already executed
+            if (isset($update_news)) {
+                $update_news = json_decode($update_news, true);
+                $update_time = array_get($update_news, 'update_time');
+                if (isset($update_time)) {
+                    $update_time = new Carbon($update_time);
+                    if ($update_time->diffInMinutes(Carbon::now()) <= 60) {
+                        $contents = array_get($update_news, 'contents');
+                    }
+                }
+            }
+
+            if (!isset($contents)) {
+                // get update news from api
+                $client = new \GuzzleHttp\Client();
+                $response = $client->request('GET', Define::EXMENT_NEWS_API_URL, [
+                    'http_errors' => false,
+                    'query' => $this->getQuery(),
+                    'timeout' => 3, // Response timeout
+                    'connect_timeout' => 3, // Connection timeout
+                ]);
+        
+                $contents = $response->getBody()->getContents();
+                if ($response->getStatusCode() != 200) {
+                    return null;
+                }
+                session()->put(Define::SYSTEM_KEY_SESSION_UPDATE_NEWS, json_encode([
+                    'update_time' => Carbon::now()->toDateTimeString(),
+                    'contents' => $contents
+                ]));
+            }
+    
+            // get wordpress items
+            $this->items = json_decode($contents, true);
+        } catch (\Exception $ex) {
+            \Log::error($ex);
+        }
     }
 }

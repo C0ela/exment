@@ -7,25 +7,32 @@ use Encore\Admin\Grid\Filter;
 use Exceedone\Exment\Form\Field as ExmentField;
 use Exceedone\Exment\Grid\Filter as ExmentFilter;
 use Encore\Admin\Grid\Filter\Where;
+use Exceedone\Exment\Grid\Filter\Where as ExmWhere;
 use Exceedone\Exment\Model\System;
 use Exceedone\Exment\Model\CustomTable;
-use Exceedone\Exment\Model\CustomColumn;
 use Exceedone\Exment\Model\CustomColumnMulti;
+use Exceedone\Exment\Model\CustomRelation;
 use Exceedone\Exment\Model\Traits\ColumnOptionQueryTrait;
 use Exceedone\Exment\Enums\ColumnType;
-use Exceedone\Exment\Enums\SystemColumn;
 use Exceedone\Exment\Enums\FilterType;
 use Exceedone\Exment\Enums\FilterSearchType;
 use Exceedone\Exment\Enums\SystemTableName;
+use Exceedone\Exment\Enums\DatabaseDataType;
 use Exceedone\Exment\ColumnItems\CustomColumns\AutoNumber;
 use Exceedone\Exment\Validator;
 
 abstract class CustomItem implements ItemInterface
 {
-    use ItemTrait, SummaryItemTrait, ColumnOptionQueryTrait;
+    use ItemTrait, SystemColumnItemTrait, SummaryItemTrait, ColumnOptionQueryTrait;
     
     protected $custom_column;
     
+    /**
+     * This custom table.
+     * *If view_pivot_column, custom_table is pivot target table
+     *
+     * @var CustomTable
+     */
     protected $custom_table;
     
     protected $custom_value;
@@ -104,20 +111,30 @@ abstract class CustomItem implements ItemInterface
     }
 
     /**
+     * Get API column name
+     *
+     * @return string
+     */
+    public function apiName()
+    {
+        return $this->_apiName();
+    }
+
+    /**
      * get Text(for display)
      */
-    public function text()
+    protected function _text($v)
     {
-        return $this->value;
+        return $v;
     }
 
     /**
      * get html(for display)
      */
-    public function html()
+    protected function _html($v)
     {
         // default escapes text
-        $text = boolval(array_get($this->options, 'grid_column')) ? get_omitted_string($this->text()) : $this->text();
+        $text = boolval(array_get($this->options, 'grid_column')) ? get_omitted_string($this->_text($v)) : $this->_text($v);
         return esc_html($text);
     }
 
@@ -175,6 +192,22 @@ abstract class CustomItem implements ItemInterface
         return $this->custom_table;
     }
 
+    public function getCustomColumn()
+    {
+        return $this->custom_column;
+    }
+
+    /**
+     * Get relation.
+     *
+     * @return CustomRelation|null
+     */
+    public function getRelation()
+    {
+        return $this->getRelationTrait();
+    }
+
+
     protected function getTargetValue($custom_value)
     {
         // if options has "summary" (for summary view)
@@ -188,14 +221,7 @@ abstract class CustomItem implements ItemInterface
 
         // if options has "view_pivot_column", get select_table's custom_value first
         if (isset($custom_value) && array_key_value_exists('view_pivot_column', $this->options)) {
-            $view_pivot_column = $this->options['view_pivot_column'];
-            if ($view_pivot_column == SystemColumn::PARENT_ID) {
-                $custom_value = $this->custom_table->getValueModel($custom_value->parent_id);
-            } else {
-                $pivot_custom_column = CustomColumn::getEloquent($this->options['view_pivot_column']);
-                $pivot_id =  array_get($custom_value, 'value.'.$pivot_custom_column->column_name);
-                $custom_value = $this->custom_table->getValueModel($pivot_id);
-            }
+            return $this->getViewPivotValue($custom_value, $this->options);
         }
 
         return array_get($custom_value, 'value.'.$this->custom_column->column_name);
@@ -242,8 +268,10 @@ abstract class CustomItem implements ItemInterface
         // if hidden setting, add hidden field
         if (boolval(array_get($form_column_options, 'hidden'))) {
             $classname = Field\Hidden::class;
-        } elseif ($this->initonly() && isset($this->value)) {
-            $classname = ExmentField\Display::class;
+        } elseif ($this->initonly()) {
+            $classname = ExmentField\ViewOnly::class;
+        } elseif ($this->viewonly($form_column_options)) {
+            $classname = ExmentField\ViewOnly::class;
         } else {
             // get field
             $classname = $this->getAdminFieldClass();
@@ -263,8 +291,17 @@ abstract class CustomItem implements ItemInterface
             $this->setAdminOptions($field, $form_column_options);
         }
 
-        if (!boolval(array_get($form_column_options, 'hidden')) && $this->initonly() && isset($this->value)) {
-            $field->displayText($this->html());
+        if (!boolval(array_get($form_column_options, 'hidden'))) {
+            if ($this->initonly()) {
+                $field->displayText($this->html())->escape(false)->default($this->value)->prepareDefault();
+            } elseif ($this->viewonly($form_column_options) && !isset($this->value)) {
+                // if view only and create, set default value
+                $this->value = array_get($options, 'default');
+                $field->displayText($this->html())->escape(false)->prepareDefault();
+                $this->value = null;
+            } elseif ($this->viewonly($form_column_options)) {
+                $field->displayText($this->html())->escape(false)->prepareDefault();
+            }
         }
 
         ///////// get common options
@@ -279,7 +316,7 @@ abstract class CustomItem implements ItemInterface
 
         // default (login user)
         if (boolval(array_get($options, 'login_user_default'))) {
-            $field->default(\Exment::user()->getUserId());
+            $field->default(\Exment::getUserId());
         }
 
         // number_format
@@ -287,18 +324,9 @@ abstract class CustomItem implements ItemInterface
             $field->attribute(['number_format' => true]);
         }
 
-        // // readonly
-        if (boolval(array_get($form_column_options, 'view_only'))) {
+        // readonly
+        if ($this->readonly($form_column_options)) {
             $field->readonly();
-        }
-
-        // required
-        if ((boolval(array_get($options, 'required')) || boolval(array_get($form_column_options, 'required')))
-            && $this->required) {
-            $field->required();
-            $field->rules('required');
-        } else {
-            $field->rules('nullable');
         }
 
         // suggest input
@@ -308,43 +336,34 @@ abstract class CustomItem implements ItemInterface
         }
 
         // set validates
-        $validate_options = [];
-        $validates = $this->getColumnValidates($validate_options, $form_column_options);
-        // set validates
-        if (count($validates)) {
-            $field->rules($validates);
-        }
+        $field->rules($this->getColumnValidates($form_column_options, $field));
 
-        // set help string using result_options
+        // set help string using result_options ----------------------------------------------------
         $help = null;
         if (array_key_value_exists('help', $options)) {
             $help = array_get($options, 'help');
         }
-        $help_regexes = array_get($validate_options, 'help_regexes');
         
         // if initonly is true and has value, not showing help
-        if ($this->initonly() && isset($this->value)) {
+        if ($this->initonly()) {
             $help = null;
         }
         // if initonly is true and now, showing help and cannot edit help
-        elseif ($this->initonly() && !isset($this->value)) {
+        elseif (boolval(array_get($this->custom_column->options, 'init_only'))) {
             $help .= exmtrans('common.help.init_flg');
-            if (isset($help_regexes)) {
-                $help .= sprintf(exmtrans('common.help.input_available_characters'), implode(exmtrans('common.separate_word'), $help_regexes));
-            }
-        }
-        // if initonly is false, showing help
-        else {
-            if (isset($help_regexes)) {
-                $help .= sprintf(exmtrans('common.help.input_available_characters'), implode(exmtrans('common.separate_word'), $help_regexes));
-            }
         }
 
         if (isset($help)) {
             $field->help(esc_html($help));
         }
+        
+        // append help
+        $this->appendHelp($form_column_options, $field);
+
 
         $field->attribute(['data-column_type' => $this->custom_column->column_type]);
+
+        $field->setElementClass("class_" . $this->uniqueName());
 
         return $field;
     }
@@ -357,10 +376,10 @@ abstract class CustomItem implements ItemInterface
         $classname = $this->getAdminFilterClass();
 
         // if where query, call Cloquire
-        if ($classname == Where::class) {
+        if ($classname == ExmWhere::class) {
             $item = $this;
-            $filteritem = new $classname(function ($query) use ($item) {
-                $item->getAdminFilterWhereQuery($query, $this->input);
+            $filteritem = new $classname(function ($query, $input) use ($item) {
+                $item->getAdminFilterWhereQuery($query, $input);
             }, $this->label(), $this->index());
         } else {
             $filteritem = new $classname($this->index(), $this->label());
@@ -390,6 +409,7 @@ abstract class CustomItem implements ItemInterface
             case ColumnType::SELECT:
             case ColumnType::SELECT_VALTEXT:
             case ColumnType::SELECT_TABLE:
+            case SystemTableName::ORGANIZATION:
                 return FilterType::SELECT;
             case ColumnType::DATE:
             case ColumnType::DATETIME:
@@ -402,6 +422,36 @@ abstract class CustomItem implements ItemInterface
             default:
                 return FilterType::DEFAULT;
         }
+    }
+
+    /**
+     * get cast name for sort
+     */
+    public function getCastName()
+    {
+        list($type, $addOption, $options) = $this->getCastOptions();
+        // if DatabaseDataType::TYPE_STRING, return null
+        if (isMatchString($type, DatabaseDataType::TYPE_STRING)) {
+            return null;
+        }
+
+        $grammar = \DB::getQueryGrammar();
+        return $grammar->getCastString($type, $addOption, $options);
+    }
+
+    /**
+     * get cast name for virtual column database
+     */
+    public function getVirtualColumnTypeName()
+    {
+        list($type, $addOption, $options) = $this->getCastOptions();
+        $grammar = \DB::getQueryGrammar();
+        return $grammar->getColumnTypeString($type);
+    }
+
+    protected function getCastOptions()
+    {
+        return [DatabaseDataType::TYPE_STRING, false, []];
     }
 
     /**
@@ -422,12 +472,29 @@ abstract class CustomItem implements ItemInterface
     {
     }
 
+    protected function disableEdit($form_column_options)
+    {
+        if ($this->initonly()) {
+            return true;
+        }
+
+        if ($this->readonly($form_column_options)) {
+            return true;
+        }
+        
+        return false;
+    }
+    
     /**
      * replace value for import
      *
      * @param mixed $value
      * @param array $options
-     * @return void
+     * @return array
+     *     result : import result is true or false.
+     *     message : If error, showing error message
+     *     skip :Iif true, skip import this column.
+     *     value : Replaced value.
      */
     public function getImportValue($value, $options = [])
     {
@@ -458,6 +525,21 @@ abstract class CustomItem implements ItemInterface
     
     protected function setValidates(&$validates, $form_column_options)
     {
+    }
+
+    protected function getAppendHelpText($form_column_options) : ?string
+    {
+        return null;
+    }
+
+    protected function appendHelp($form_column_options, Field $field)
+    {
+        $text = $this->getAppendHelpText($form_column_options);
+        if (is_nullorempty($text)) {
+            return;
+        }
+
+        $field->appendHelp($text);
     }
 
     public static function getItem(...$args)
@@ -494,71 +576,29 @@ abstract class CustomItem implements ItemInterface
 
     /**
      * Get column validate array.
-     * @param array $result_options
      * @param mixed $form_column_options
+     * @param Field $field
      * @return array
      */
-    protected function getColumnValidates(&$result_options, $form_column_options)
+    public function getColumnValidates($form_column_options, Field $field)
     {
         $options = array_get($this->custom_column, 'options');
-
         $validates = [];
+        
         // setting options --------------------------------------------------
-        // unique
-        if (boolval(array_get($options, 'unique')) && !boolval(array_get($options, 'multiple_enabled'))) {
-            // add unique field
-            $unique_table_name = getDBTableName($this->custom_table); // database table name
-            $unique_column_name = "value->".array_get($this->custom_column, 'column_name'); // column name
-            
-            $uniqueRules = [$unique_table_name, $unique_column_name];
-            // create rules.if isset id, add
-            $uniqueRules[] = $this->id ?? '';
-            $uniqueRules[] = 'id';
-            // and ignore data deleted_at is NULL
-            $uniqueRules[] = 'deleted_at';
-            $uniqueRules[] = 'NULL';
-            $rules = "unique:".implode(",", $uniqueRules);
-            // add rules
-            $validates[] = $rules;
+        // required
+        if ($this->required($form_column_options)) {
+            $field->required();
+            $validates[] = 'required';
+        } else {
+            $validates[] = 'nullable';
         }
+
+        ///// unique rule moves to validatorSaving logic
 
         // init_flg(for validation)
         if ($this->initonly()) {
             $validates[] = new Validator\InitOnlyRule($this->custom_column, $this->custom_value);
-        }
-
-
-        // // regex rules
-        $help_regexes = [];
-        if (boolval(config('exment.expart_mode', false)) && array_key_value_exists('regex_validate', $options)) {
-            $regex_validate = array_get($options, 'regex_validate');
-            $validates[] = 'regex:/'.$regex_validate.'/u';
-        } elseif (array_key_value_exists('available_characters', $options)) {
-            $difinitions = CustomColumn::getAvailableCharacters();
-
-            $available_characters = stringToArray(array_get($options, 'available_characters') ?? []);
-            $regexes = [];
-            // add regexes using loop
-            foreach ($available_characters as $available_character) {
-                // get available_character define
-                $define = collect($difinitions)->first(function ($d) use ($available_character) {
-                    return array_get($d, 'key') == $available_character;
-                });
-                if (!isset($define)) {
-                    continue;
-                }
-
-                $regexes[] = array_get($define, 'regex');
-                $help_regexes[] = array_get($define, 'label');
-            }
-            if (count($regexes) > 0) {
-                $validates[] = 'regex:/^['.implode("", $regexes).']*$/u';
-            }
-        }
-        
-        // set help_regexes to result_options
-        if (count($help_regexes) > 0) {
-            $result_options['help_regexes'] = $help_regexes;
         }
 
         // set column's validates
@@ -566,6 +606,7 @@ abstract class CustomItem implements ItemInterface
 
         return $validates;
     }
+
 
     /**
      * Compare two values.
@@ -578,20 +619,40 @@ abstract class CustomItem implements ItemInterface
     protected function initonly()
     {
         $initOnly = boolval(array_get($this->custom_column->options, 'init_only'));
-        $required = boolval(array_get($this->custom_column->options, 'required'));
 
-        // if init only, required, and set value, set $this->required is false
-        if ($initOnly && isset($this->value)) {
-            $this->required = false;
-        }
-        return $initOnly;
+        return $initOnly && isset($this->value);
     }
 
-    protected function isSetAdminOptions($form_column_options)
+    protected function readonly($form_column_options)
+    {
+        return boolval(array_get($form_column_options, 'read_only'));
+    }
+
+    protected function viewonly($form_column_options)
+    {
+        return boolval(array_get($form_column_options, 'view_only'));
+    }
+
+    protected function required($form_column_options)
+    {
+        if ($this->initonly() || $this->viewonly($form_column_options)) {
+            return false;
+        }
+        if (!$this->required) {
+            return false;
+        }
+
+        $options = array_get($this->custom_column, 'options');
+        return boolval(array_get($options, 'required')) || boolval(array_get($form_column_options, 'required'));
+    }
+
+    protected function isSetAdminOptions($form_column_options) : bool
     {
         if (boolval(array_get($form_column_options, 'hidden'))) {
             return false;
-        } elseif ($this->initonly() && isset($this->value)) {
+        } elseif ($this->initonly()) {
+            return false;
+        } elseif ($this->viewonly($form_column_options)) {
             return false;
         }
 

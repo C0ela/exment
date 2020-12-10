@@ -10,7 +10,7 @@ class CustomRelation extends ModelBase implements Interfaces\TemplateImporterInt
     use Traits\TemplateTrait;
     use Traits\UseRequestSessionTrait;
     use Traits\ClearCacheTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\UniqueKeyCustomColumnTrait;
 
     //protected $with = ['parent_custom_table', 'child_custom_table'];
@@ -153,7 +153,7 @@ class CustomRelation extends ModelBase implements Interfaces\TemplateImporterInt
 
     /**
      * Get relation name.
-     * @param CustomRelation $relation_obj
+     *
      * @return string
      */
     public function getRelationName()
@@ -163,8 +163,8 @@ class CustomRelation extends ModelBase implements Interfaces\TemplateImporterInt
 
     /**
      * Get relation name using parent and child table.
-     * @param $parent
-     * @param $child
+     * @param CustomTable|string|null $parent
+     * @param CustomTable|string|null $child
      * @return string
      */
     public static function getRelationNamebyTables($parent, $child)
@@ -178,13 +178,69 @@ class CustomRelation extends ModelBase implements Interfaces\TemplateImporterInt
     }
 
     /**
+     * Get dynamic relation value for custom value.
+     *
+     * @param CustomValue $custom_value
+     * @param boolean $isCallAsParent
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany | \Illuminate\Database\Eloquent\Relations\MorphMany | \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function getDynamicRelationValue(CustomValue $custom_value, bool $isCallAsParent)
+    {
+        if ($isCallAsParent) {
+            $child_custom_table = CustomTable::getEloquent($this->child_custom_table_id);
+            $pivot_table_name = $this->getRelationName();
+    
+            // Get Parent and child table Name.
+            // case 1 to many
+            if ($this->relation_type == RelationType::ONE_TO_MANY) {
+                return $custom_value->morphMany(getModelName($child_custom_table), 'parent');
+            }
+            // case many to many
+            else {
+                // Create pivot table
+                if (!hasTable($pivot_table_name)) {
+                    \Schema::createRelationValueTable($pivot_table_name);
+                }
+    
+                return $custom_value->belongsToMany(getModelName($child_custom_table), $pivot_table_name, "parent_id", "child_id")->withPivot("id");
+            }
+        } else {
+            $parent_custom_table = CustomTable::getEloquent($this->parent_custom_table_id);
+            $pivot_table_name = $this->getRelationName();
+
+            // Get Parent and child table Name.
+            // case 1 to many
+            if ($this->relation_type == RelationType::ONE_TO_MANY) {
+                return $custom_value->belongsTo(getModelName($parent_custom_table, true), "parent_id");
+            }
+            // case many to many
+            else {
+                // Create pivot table
+                if (!hasTable($pivot_table_name)) {
+                    \Schema::createRelationValueTable($pivot_table_name);
+                }
+
+                return $custom_value->belongsToMany(getModelName($parent_custom_table, true), $pivot_table_name, "child_id", "parent_id")->withPivot("id");
+            }
+        }
+    }
+
+    /**
      * get sheet name for excel, csv
      */
     public function getSheetName()
     {
         if ($this->relation_type == RelationType::MANY_TO_MANY) {
-            return $this->parent_custom_table->table_name . '_' . $this->child_custom_table->table_name;
+            $sheetname = $this->parent_custom_table->table_name . '_' . $this->child_custom_table->table_name;
+
+            // if length is too long, use id instead of name
+            if (mb_strlen($sheetname) > 30) {
+                return $this->parent_custom_table_id . '_' . $this->child_custom_table_id;
+            } else {
+                return $sheetname;
+            }
         }
+        
         return $this->child_custom_table->table_name;
     }
     
@@ -195,23 +251,6 @@ class CustomRelation extends ModelBase implements Interfaces\TemplateImporterInt
     public static function getEloquent($id, $withs = [])
     {
         return static::getEloquentCache($id, $withs);
-    }
-    
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    public function forgetOption($key)
-    {
-        return $this->forgetJson('options', $key);
-    }
-    public function clearOption()
-    {
-        return $this->clearJson('options');
     }
     
     public function getParentImportColumnAttribute()
@@ -233,6 +272,19 @@ class CustomRelation extends ModelBase implements Interfaces\TemplateImporterInt
     protected static function boot()
     {
         parent::boot();
+        
+        // saved event
+        static::saved(function ($model) {
+            // Create pivot table
+            if ($model->relation_type != RelationType::MANY_TO_MANY) {
+                return;
+            }
+
+            $pivot_table_name = $model->getRelationName();
+            if (!hasTable($pivot_table_name)) {
+                \Schema::createRelationValueTable($pivot_table_name);
+            }
+        });
         
         // update event
         static::updating(function ($model) {

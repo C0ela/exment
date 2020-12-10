@@ -2,7 +2,6 @@
 
 namespace Exceedone\Exment\Storage\Disk;
 
-use Exceedone\Exment\Model\File;
 use Exceedone\Exment\Model\Define;
 use Illuminate\Support\Facades\Storage;
 
@@ -81,7 +80,10 @@ class TemplateDiskService extends DiskServiceBase
             $localPath = path_join($localSyncDiskItem->dirName(), $file);
             $localSyncDisk->writeStream($localPath, $stream);
 
-            fclose($stream);
+            try {
+                fclose($stream);
+            } catch (\Exception $ex) {
+            }
         }
         
         return true;

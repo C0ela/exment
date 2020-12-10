@@ -12,7 +12,7 @@ trait BuilderTrait
      * dbDeleteFilter: Query that retrieves data to be deleted
      * matchFilter: Query to determine if the data exists in the database
      *
-     * @return void
+     * @return array Inserted data
      */
     public function insertDelete($table, $values, $settings = [])
     {
@@ -29,7 +29,9 @@ trait BuilderTrait
             ],
             $settings
         );
-        extract($settings);
+        $dbValueFilter = $settings['dbValueFilter'];
+        $dbDeleteFilter = $settings['dbDeleteFilter'];
+        $matchFilter = $settings['matchFilter'];
         
         // get DB values
         $dbValueQuery = \DB::table($table);
@@ -93,6 +95,16 @@ trait BuilderTrait
         $results = $this->connection->selectFromWriteConnection($this->grammar->compileGetVersion());
 
         return $this->connection->getPostProcessor()->processIsMariaDB($results);
+    }
+
+    /**
+     * Check sqlserver
+     *
+     * @return bool
+     */
+    public function isSqlServer()
+    {
+        return false;
     }
 
     public function hasIndex($tableName, $columnName, $indexName)
@@ -177,10 +189,36 @@ trait BuilderTrait
 
         $sql = $unique ? $this->grammar->compileGetUnique($tableName) : $this->grammar->compileGetIndex($tableName);
 
-        $results = $this->connection->select($sql, [$columnName]);
-
+        $results = $this->getUniqueIndexDefinitionsSelect($sql, $tableName, $columnName, $unique);
         return $this->connection->getPostProcessor()->processIndexDefinitions($baseTableName, $results);
     }
+    
+
+    /**
+     * get database constraint list
+     *
+     * @param string $tableName
+     * @param string $columnName
+     * @return array
+     */
+    protected function getConstraints($tableName, $columnName) : array
+    {
+        if (!\Schema::hasTable($tableName)) {
+            return [];
+        }
+
+        $baseTableName = $tableName;
+        $tableName = $this->connection->getTablePrefix().$tableName;
+
+        $sql = $this->grammar->compileGetConstraint($tableName);
+        if (is_null($sql)) {
+            return [];
+        }
+
+        $results = $this->connection->select($sql, ['column_name' => $columnName]);
+        return $this->connection->getPostProcessor()->processConstraints($results);
+    }
+    
     
     /**
      * Create Value Table if it not exists.
@@ -217,9 +255,10 @@ trait BuilderTrait
      * @param string $db_column_name
      * @param string $index_name
      * @param string $json_column_name
+     * @param string $column_type
      * @return void
      */
-    public function alterIndexColumn($db_table_name, $db_column_name, $index_name, $json_column_name)
+    public function alterIndexColumn($db_table_name, $db_column_name, $index_name, $json_column_name, $column_type)
     {
         if (!\Schema::hasTable($db_table_name)) {
             return;
@@ -227,7 +266,7 @@ trait BuilderTrait
 
         $db_table_name = $this->connection->getTablePrefix().$db_table_name;
 
-        $sqls = $this->grammar->compileAlterIndexColumn($db_table_name, $db_column_name, $index_name, $json_column_name);
+        $sqls = $this->grammar->compileAlterIndexColumn($db_table_name, $db_column_name, $index_name, $json_column_name, $column_type);
 
         foreach ($sqls as $sql) {
             $this->connection->statement($sql);
@@ -262,6 +301,28 @@ trait BuilderTrait
             \Schema::table($db_table_name, function (Blueprint $table) use ($db_column_name) {
                 $table->dropColumn($db_column_name);
             });
+        }
+    }
+    
+    
+    /**
+     * drop constraint list
+     *
+     * @param string $tableName
+     * @param string $columnName
+     * @return void
+     */
+    public function dropConstraints($tableName, $columnName) : void
+    {
+        if (!\Schema::hasTable($tableName)) {
+            return;
+        }
+
+        $constraints = $this->getConstraints($tableName, $columnName);
+        $tableName = $this->connection->getTablePrefix().$tableName;
+        foreach ($constraints as $constraint) {
+            $sql = $this->grammar->compileDropConstraint($tableName, $constraint);
+            $results = $this->connection->statement($sql);
         }
     }
 }

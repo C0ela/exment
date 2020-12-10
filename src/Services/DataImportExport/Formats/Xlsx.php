@@ -26,20 +26,63 @@ class Xlsx extends FormatBase
             unset($writer);
         }, 200, $this->getDefaultHeaders());
     }
+    
+    public function saveAsFile($dirpath, $files)
+    {
+        $writer = $this->createWriter($files[0]['spreadsheet']);
+        $file_path = path_join($dirpath, $this->filebasename. ".xlsx");
+        $writer->save($file_path);
+        // close workbook and release memory
+        $files[0]['spreadsheet']->disconnectWorksheets();
+        $files[0]['spreadsheet']->garbageCollect();
+        unset($writer);
+    }
 
     protected function getDefaultHeaders()
     {
         $filename = $this->getFileName();
         return [
             'Content-Type'        => 'application/force-download',
-            'Content-Disposition' => "attachment; filename=\"$filename\"",
+            'Content-disposition' => "attachment; filename*=UTF-8''". rawurlencode($filename),
         ];
     }
 
     /**
      * get data table list. contains self table, and relations (if contains)
      */
-    public function getDataTable($request)
+    public function getDataTable($request, array $options = [])
+    {
+        $options = $this->getDataOptions($options);
+        return $this->_getData($request, function ($spreadsheet) use ($options) {
+            // if over row size, return number
+            if (boolval($options['checkCount'])) {
+                if (($count = $this->getRowCount($spreadsheet)) > (config('exment.import_max_row_count', 1000) + 2)) {
+                    return $count;
+                }
+            }
+
+            // get all data
+            $datalist = [];
+            foreach ($spreadsheet->getSheetNames() as $sheetName) {
+                $sheet = $spreadsheet->getSheetByName($sheetName);
+                $datalist[$sheetName] = getDataFromSheet($sheet, 0, false, true);
+            }
+
+            return $datalist;
+        });
+    }
+
+    /**
+     * get data table list. contains self table, and relations (if contains)
+     */
+    public function getDataCount($request)
+    {
+        return $this->_getData($request, function ($spreadsheet) {
+            return $this->getRowCount($spreadsheet);
+        });
+    }
+
+    protected function _getData($request, $callback)
     {
         // get file
         if ($request instanceof Request) {
@@ -53,34 +96,20 @@ class Xlsx extends FormatBase
         
         $reader = $this->createReader();
         $spreadsheet = $reader->load($path);
-
-        $datalist = [];
-
         try {
-            // if over row size, return number
-            if (($count = $this->getRowCount($spreadsheet)) > (config('exment.import_max_row_count', 1000) + 2)) {
-                return $count;
-            }
-
-            // get all data
-            foreach ($spreadsheet->getSheetNames() as $sheetName) {
-                $sheet = $spreadsheet->getSheetByName($sheetName);
-                $datalist[$sheetName] = getDataFromSheet($sheet, 0, false, true);
-            }
+            return $callback($spreadsheet);
         } finally {
             // close workbook and release memory
             $spreadsheet->disconnectWorksheets();
             $spreadsheet->garbageCollect();
             unset($spreadsheet, $reader);
         }
-
-        return $datalist;
     }
 
     /**
      * Get all sheet's row count
      *
-     * @param [type] $spreadsheet
+     * @param \PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet
      * @return int
      */
     protected function getRowCount($spreadsheet) : int

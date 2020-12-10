@@ -4,15 +4,30 @@ namespace Exceedone\Exment\ColumnItems\CustomColumns;
 
 use Exceedone\Exment\ColumnItems\CustomItem;
 use Encore\Admin\Form\Field;
+use Exceedone\Exment\Validator;
 
 class Textarea extends CustomItem
 {
-    public function html()
+    public function saving()
     {
-        $text = $this->text();
+        if (is_nullorempty($this->value)) {
+            return;
+        }
+        return strval($this->value);
+    }
+
+    protected function _html($v)
+    {
+        $text = $this->_text($v);
         $text = boolval(array_get($this->options, 'grid_column')) ? get_omitted_string($text) : $text;
-        
-        return  replaceBreak($text);
+        $text = replaceBreak($text);
+
+        if (!config('exment.textarea_space_tag', true)) {
+            return $text;
+        }
+
+        // replace space to tag
+        return preg_replace('/ /', '<span style="margin-right: 0.5em;"></span>', $text);
     }
     protected function getAdminFieldClass()
     {
@@ -23,5 +38,11 @@ class Textarea extends CustomItem
     {
         $options = $this->custom_column->options;
         $field->rows(array_get($options, 'rows', 6));
+    }
+    
+    protected function setValidates(&$validates, $form_column_options)
+    {
+        // value string
+        $validates[] = new Validator\StringNumericRule();
     }
 }

@@ -163,7 +163,7 @@ class TemplateImporter
 
                 $json['template_type'] = 'user';
                 $templates[] = $json;
-            } catch (Exception $exception) {
+            } catch (\Exception $exception) {
                 //TODO:error handling
             }
         }
@@ -201,7 +201,7 @@ class TemplateImporter
                 
                 $json['template_type'] = 'local';
                 $templates[] = $json;
-            } catch (Exception $exception) {
+            } catch (\Exception $exception) {
                 //TODO:error handling
             }
         }
@@ -456,14 +456,17 @@ class TemplateImporter
      */
     protected function importFromFile($jsonString, $options = [])
     {
-        extract(array_merge(
+        $options = array_merge(
             [
                 'system_flg' => false,
                 'is_update' => false,
                 'basePath' => null,
             ],
             $options
-        ));
+        );
+        $system_flg = $options['system_flg'];
+        $is_update = $options['is_update'];
+        $basePath = $options['basePath'];
 
         $json = json_decode($jsonString, true);
         if (!isset($json)) {
@@ -595,7 +598,7 @@ class TemplateImporter
                 // get columns. --------------------------------------------------
                 if (array_key_exists('custom_columns', $table)) {
                     foreach (array_get($table, 'custom_columns') as $column) {
-                        CustomColumn::importTemplateRelationColumn($column, $is_update, [
+                        CustomColumn::importTemplateLinkage($column, $is_update, [
                             'system_flg' => $system_flg,
                             'parent' => $obj_table,
                         ]);

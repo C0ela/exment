@@ -5,6 +5,8 @@ namespace Exceedone\Exment\Model;
 use Encore\Admin\Facades\Admin;
 use Exceedone\Exment\Enums\FormBlockType;
 use Exceedone\Exment\Enums\FormColumnType;
+use Exceedone\Exment\DataItems\Show as ShowItem;
+use Exceedone\Exment\DataItems\Form as FormItem;
 
 class CustomForm extends ModelBase implements Interfaces\TemplateImporterInterface
 {
@@ -43,6 +45,20 @@ class CustomForm extends ModelBase implements Interfaces\TemplateImporterInterfa
         ],
     ];
 
+    /**
+     * Form item
+     *
+     * @var FormItem\FormBase
+     */
+    private $_form_item;
+
+    /**
+     * Show Item for data detail
+     *
+     * @var ShowItem\ShowBase
+     */
+    private $_show_item;
+
     public function custom_table()
     {
         return $this->belongsTo(CustomTable::class, 'custom_table_id');
@@ -64,10 +80,43 @@ class CustomForm extends ModelBase implements Interfaces\TemplateImporterInterfa
     }
     
     /**
+     * Show Item for data detail
+     *
+     * @return ShowItem\ShowBase
+     */
+    public function getShowItemAttribute()
+    {
+        if (isset($this->_show_item)) {
+            return $this->_show_item;
+        }
+
+        $this->_show_item = ShowItem\DefaultShow::getItem($this->custom_table, $this);
+
+        return $this->_show_item;
+    }
+
+    /**
+     * Form Item for data detail
+     *
+     * @return FormItem\FormBase
+     */
+    public function getFormItemAttribute()
+    {
+        if (isset($this->_form_item)) {
+            return $this->_form_item;
+        }
+
+        $this->_form_item = FormItem\DefaultForm::getItem($this->custom_table, $this);
+
+        return $this->_form_item;
+    }
+
+
+    /**
      * get default form using table
      *
      * @param mixed $tableObj table_name, object or id eic
-     * @return void
+     * @return CustomForm
      */
     public static function getDefault($tableObj)
     {
@@ -114,7 +163,7 @@ class CustomForm extends ModelBase implements Interfaces\TemplateImporterInterfa
                 ->where('form_block_type', FormBlockType::DEFAULT)
                 ->first();
             // loop for index_enabled columns, and add form.
-            foreach ($tableObj->custom_columns as $index => $custom_column) {
+            foreach ($tableObj->custom_columns_cache as $index => $custom_column) {
                 $form_column = new CustomFormColumn;
                 $form_column->custom_form_block_id = $form_block->id;
                 $form_column->form_column_type = FormColumnType::COLUMN;

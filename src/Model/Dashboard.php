@@ -6,13 +6,15 @@ use Encore\Admin\Facades\Admin;
 use Exceedone\Exment\Enums\DashboardType;
 use Exceedone\Exment\Enums\UserSetting;
 use Exceedone\Exment\Enums\Permission;
+use Exceedone\Exment\Enums\JoinedOrgFilterType;
+use Exceedone\Exment\Enums\SystemTableName;
 use Illuminate\Http\Request as Req;
 use Illuminate\Database\Eloquent\Builder;
 
 class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterface
 {
     use Traits\AutoSUuidTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\DefaultFlgTrait;
     use Traits\TemplateTrait;
     use Traits\UseRequestSessionTrait;
@@ -51,8 +53,8 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
     /**
      * Get dashboard items selecting row
      *
-     * @param [type] $row_no
-     * @return void
+     * @param int $row_no
+     * @return \Illuminate\Support\Collection
      */
     public function dashboard_row_boxes($row_no)
     {
@@ -66,7 +68,13 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
             return true;
         }, false)->sortBy('column_no');
     }
-    
+        
+    public function data_share_authoritables()
+    {
+        return $this->hasMany(DataShareAuthoritable::class, 'parent_id')
+            ->where('parent_type', '_dashboard');
+    }
+
     /**
      * get default dashboard
      */
@@ -121,23 +129,6 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
     {
         return static::getEloquentDefault($id, $withs);
     }
-
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    public function forgetOption($key)
-    {
-        return $this->forgetJson('options', $key);
-    }
-    public function clearOption()
-    {
-        return $this->clearJson('options');
-    }
     
     protected static function boot()
     {
@@ -149,6 +140,13 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
         static::updating(function ($model) {
             $model->setDefaultFlg(null, 'setDefaultFlgFilter', 'setDefaultFlgSet');
         });
+        
+        static::created(function ($model) {
+            if ($model->dashboard_type == DashboardType::USER) {
+                // save Authoritable
+                DataShareAuthoritable::setDataAuthoritable($model);
+            }
+        });
 
         // delete event
         static::deleting(function ($model) {
@@ -158,7 +156,7 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
         
         // add global scope
         static::addGlobalScope('showableDashboards', function (Builder $builder) {
-            return static::showableDashboards($builder);
+            static::showableDashboards($builder);
         });
     }
 
@@ -183,18 +181,36 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
     /**
      * scope user showable Dashboards
      *
-     * @param [type] $query
+     * @param \Illuminate\Database\Eloquent\Builder $query
      * @return void
      */
     protected static function showableDashboards($query)
     {
-        return $query->where(function ($query) {
-            $query->where(function ($query) {
-                $query->where('dashboard_type', DashboardType::SYSTEM);
-            })->orWhere(function ($query) {
-                $login_user = \Exment::user();
-                $query->where('dashboard_type', DashboardType::USER)
-                    ->where('created_user_id', isset($login_user) ? $login_user->getUserId() : null);
+        $query->where('dashboard_type', DashboardType::SYSTEM);
+
+        $user = \Exment::user();
+        if (!isset($user)) {
+            return;
+        }
+
+        if (!hasTable(getDBTableName(SystemTableName::USER, false)) || !hasTable(getDBTableName(SystemTableName::ORGANIZATION, false))) {
+            return;
+        }
+
+        $query->orWhere(function ($query) use ($user) {
+            $query->where('dashboard_type', DashboardType::USER);
+
+            // filtered created_user, and shared others.
+            $query->where(function ($query) use ($user) {
+                $query->where('created_user_id', $user->getUserId())
+                    ->orWhereHas('data_share_authoritables', function ($query) use ($user) {
+                        $enum = JoinedOrgFilterType::getEnum(System::org_joined_type_custom_value(), JoinedOrgFilterType::ONLY_JOIN);
+                        $query->whereInMultiple(
+                            ['authoritable_user_org_type', 'authoritable_target_id'],
+                            $user->getUserAndOrganizationIds($enum),
+                            true
+                        );
+                    });
             });
         });
     }
@@ -202,23 +218,26 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
     /**
      * Check this login user has edit permission this dashboard
      *
-     * @param [type] $id
      * @return boolean
      */
     public function hasEditPermission()
     {
-        // check has system permission
-        if (!static::hasSystemPermission()) {
-            if ($this->dashboard_type == DashboardType::SYSTEM) {
-                return false;
-            } elseif ($this->created_user_id != \Exment::user()->getUserId()) {
-                return false;
-            }
-        } elseif ($this->dashboard_type == DashboardType::USER && $this->created_user_id != \Exment::user()->getUserId()) {
-            return false;
-        }
+        $login_user = \Exment::user();
+        if ($this->dashboard_type == DashboardType::SYSTEM) {
+            return static::hasSystemPermission();
+        } elseif ($this->created_user_id == $login_user->getUserId()) {
+            return true;
+        };
 
-        return true;
+        
+        // check if editable user exists
+        $enum = JoinedOrgFilterType::getEnum(System::org_joined_type_custom_value(), JoinedOrgFilterType::ONLY_JOIN);
+        $hasEdit = $this->data_share_authoritables()
+            ->where('authoritable_type', 'data_share_edit')
+            ->whereInMultiple(['authoritable_user_org_type', 'authoritable_target_id'], $login_user->getUserAndOrganizationIds($enum), true)
+            ->exists();
+
+        return $hasEdit;
     }
     
     public static function hasSystemPermission()
@@ -228,11 +247,13 @@ class Dashboard extends ModelBase implements Interfaces\TemplateImporterInterfac
     
     public static function hasPermission()
     {
-        return !boolval(config('exment.userdashboard_disabled', false)) || static::hasSystemPermission();
+        return System::userdashboard_available() || static::hasSystemPermission();
     }
 
     public function deletingChildren()
     {
         $this->dashboard_boxes()->delete();
+        // delete data_share_authoritables
+        DataShareAuthoritable::deleteDataAuthoritable($this);
     }
 }

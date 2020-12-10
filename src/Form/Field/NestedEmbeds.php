@@ -11,6 +11,9 @@ class NestedEmbeds extends Embeds
 
     protected $nestedForm;
 
+    protected $relationName;
+
+
     /**
      * Create a new HasMany field instance.
      *
@@ -21,6 +24,12 @@ class NestedEmbeds extends Embeds
     {
         parent::__construct($column, $arguments);
     }
+
+    /**
+     * Get NestedEmbeddedForm.
+     *
+     * @return NestedEmbeddedForm
+     */
     protected function buildEmbeddedForm()
     {
         if (!isset($this->nestedForm)) {
@@ -28,6 +37,13 @@ class NestedEmbeds extends Embeds
             $this->nestedForm = $this->setFormField($form);
         }
         return $this->nestedForm;
+    }
+
+    public function setRelationName($relationName)
+    {
+        $this->relationName = $relationName;
+
+        return $this;
     }
 
     protected function getRules()
@@ -52,6 +68,35 @@ class NestedEmbeds extends Embeds
         return $attributes;
     }
 
+    
+    /**
+     * Get data for Embedded form.
+     *
+     * Normally, data is obtained from the database.
+     *
+     * When the data validation errors, data is obtained from session flash.
+     *
+     * @return array
+     */
+    protected function getEmbeddedData()
+    {
+        $keyName = "{$this->relationName}.{$this->column}";
+        if ($old = old($keyName)) {
+            return $old;
+        }
+
+        if (empty($this->value)) {
+            return [];
+        }
+
+        if (is_string($this->value)) {
+            return json_decode($this->value, true);
+        }
+
+        return (array) $this->value;
+    }
+
+    
     /**
      * Render the form.
      *
@@ -61,7 +106,7 @@ class NestedEmbeds extends Embeds
     {
         $render = parent::render();
         $script = $this->buildEmbeddedForm()->getScripts();
-        if (isset($script)) {
+        if (!is_nullorempty($script)) {
             $this->script = $script;
         }
 

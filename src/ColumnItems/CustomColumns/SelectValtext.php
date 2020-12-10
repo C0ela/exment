@@ -2,6 +2,8 @@
 
 namespace Exceedone\Exment\ColumnItems\CustomColumns;
 
+use Exceedone\Exment\Validator;
+
 class SelectValtext extends Select
 {
     use ImportValueTrait;
@@ -22,6 +24,25 @@ class SelectValtext extends Select
         return $returns;
     }
     
+    protected function setValidates(&$validates, $form_column_options)
+    {
+        $select_options = $this->custom_column->createSelectOptions();
+        $validates[] = new Validator\SelectValTextRule($select_options);
+    }
+
+    public function saving()
+    {
+        $v = $this->getPureValue($this->value);
+        if (!is_null($v)) {
+            return $v;
+        }
+    }
+
+    /**
+     * replace value for import
+     *
+     * @return array
+     */
     protected function getImportValueOption()
     {
         return $this->custom_column->createSelectOptions();
@@ -30,7 +51,7 @@ class SelectValtext extends Select
     /**
      * Get pure value. If you want to change the search value, change it with this function.
      *
-     * @param [type] $value
+     * @param string $label
      * @return ?string string:matched, null:not matched
      */
     public function getPureValue($label)

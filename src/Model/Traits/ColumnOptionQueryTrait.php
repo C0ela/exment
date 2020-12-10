@@ -12,23 +12,29 @@ use Exceedone\Exment\Enums\ConditionTypeDetail;
 trait ColumnOptionQueryTrait
 {
     /**
-     * Get select option key
+     * Get select option key (as query string)
      *
-     * @param [type] $key
-     * @param boolean $append_table
-     * @param [type] $table_id
-     * @return void
+     * @param string $column_key
+     * @param boolean $append_table if true, append table info to qeury
+     * @param string $table_id target table id
+     * @param array $options
+     * @return string
      */
     protected static function getOptionKey($column_key, $append_table = true, $table_id = null, $options = [])
     {
-        extract(array_merge(
+        $options = array_merge(
             [
                 'view_pivot_column' => null,
                 'view_pivot_table' => null,
                 'codition_type' => null,
             ],
             $options
-        ));
+        );
+
+        $view_pivot_column = $options['view_pivot_column'];
+        $view_pivot_table = $options['view_pivot_table'];
+        $codition_type = $options['codition_type'];
+        
         $query = [];
         
         if ($append_table && isset($table_id)) {
@@ -78,7 +84,7 @@ trait ColumnOptionQueryTrait
     /**
      * Get params(custom_table, column_name etc) from query
      *
-     * @return void
+     * @return array
      */
     protected static function getOptionParams($query, $defaultCustomTable)
     {
@@ -112,7 +118,7 @@ trait ColumnOptionQueryTrait
     {
         $column_type_target = explode("?", $view_column_target)[0];
         
-        if (isset($column_table_name_key) && isset($this->{$column_table_name_key})) {
+        if (!is_nullorempty($column_table_name_key) && isset($this->{$column_table_name_key})) {
             $custom_table_id = $this->{$column_table_name_key}->custom_table_id;
         } else {
             $custom_table_id = null;

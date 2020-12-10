@@ -3,7 +3,7 @@
 namespace Exceedone\Exment\Model;
 
 use Exceedone\Exment\Auth\HasPermissions;
-use Exceedone\Exment\Providers\CustomUserProvider;
+use Exceedone\Exment\Providers\LoginUserProvider;
 use Exceedone\Exment\Enums\SystemTableName;
 use Encore\Admin\Traits\AdminBuilder;
 use Laravel\Passport\HasApiTokens;
@@ -92,14 +92,14 @@ class LoginUser extends ModelBase implements \Illuminate\Contracts\Auth\Authenti
         return !is_nullorempty($this->login_provider);
     }
     
-    public function findForPassport($username)
+    public function findForPassport($username, ?array $credentials = [])
     {
-        return CustomUserProvider::RetrieveByCredential(['username' => $username]);
+        return LoginUserProvider::RetrieveByCredential(array_merge(['username' => $username], $credentials));
     }
 
-    public function validateForPassportPasswordGrant($password)
+    public function validateForPassportPasswordGrant($password, ?array $credentials = [])
     {
-        return CustomUserProvider::ValidateCredential($this, ['password' => $password]);
+        return LoginUserProvider::ValidateCredential($this, array_merge(['password' => $password], $credentials));
     }
 
     /**
@@ -126,20 +126,22 @@ class LoginUser extends ModelBase implements \Illuminate\Contracts\Auth\Authenti
     /**
      * send Password
      */
-    protected function send($is_newuser)
+    protected function send(bool $is_newuser) : ?MailSender
     {
         if (!isset($this->send_password)) {
-            return;
+            return null;
         }
         $user = $this->base_user;
         $prms = [];
         $prms['user'] = $this->base_user->value;
         $prms['user']['password'] = $this->send_password;
-        MailSender::make($is_newuser ? MailKeyName::CREATE_USER : MailKeyName::RESET_PASSWORD_ADMIN, $user)
+        $sender = MailSender::make($is_newuser ? MailKeyName::CREATE_USER : MailKeyName::RESET_PASSWORD_ADMIN, $user)
             ->prms($prms)
             ->user($user)
-            ->disableHistoryBody()
-            ->send();
+            ->disableHistoryBody();
+        $sender->send();
+
+        return $sender;
     }
 
     /**
@@ -147,11 +149,11 @@ class LoginUser extends ModelBase implements \Illuminate\Contracts\Auth\Authenti
      */
     public function getSettingValue($key, $default = null)
     {
-        if (is_null($this->base_user)) {
+        if (is_null($this->base_user_id)) {
             return $default;
         }
         // get settings from settion
-        $settings = System::requestSession("user_setting", function () use ($key, $default) {
+        $settings = System::requestSession("user_setting", function () {
             $usersetting = UserSetting::firstOrCreate(['base_user_id' => $this->getUserId()]);
             $settings = $usersetting->settings ?? [];
             return $settings;

@@ -23,9 +23,9 @@ class FieldFormatter
     /**
      * Format the value according to the provided formats.
      *
-     * @param  $key
-     * @param  $value
-     * @param  $formats
+     * @param mixed $key
+     * @param mixed $value
+     * @param array $formats
      *
      * @return string formatted value
      */
@@ -53,7 +53,7 @@ class FieldFormatter
     /**
      * Check if a field is empty.
      *
-     * @param $value
+     * @param mixed $value
      * @param array $options
      *
      * @return string
@@ -68,7 +68,7 @@ class FieldFormatter
     /**
      * Boolean.
      *
-     * @param       $value
+     * @param mixed $value
      * @param array $options The false / true values to return
      *
      * @return string Formatted version of the boolean field
@@ -89,10 +89,10 @@ class FieldFormatter
     /**
      * Format the string response, default is to just return the string.
      *
-     * @param  $value
-     * @param  $format
+     * @param mixed $value
+     * @param string $format
      *
-     * @return formatted string
+     * @return string formatted string
      */
     public static function string($value, $format = null)
     {
@@ -109,7 +109,7 @@ class FieldFormatter
      * @param string $value
      * @param string $format
      *
-     * @return formatted datetime
+     * @return string formatted datetime
      */
     public static function datetime($value, $format = 'Y-m-d H:i:s')
     {

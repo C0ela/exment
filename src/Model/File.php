@@ -66,7 +66,7 @@ class File extends ModelBase
         if (isset($custom_column)) {
             $table_name = $this->local_dirname ?? $custom_table->table_name;
             $custom_column = CustomColumn::getEloquent($custom_column, $table_name);
-            $this->custom_column_id = $custom_column->id;
+            $this->custom_column_id = $custom_column ? $custom_column->id : null;
         }
         $this->save();
         return $this;
@@ -74,7 +74,10 @@ class File extends ModelBase
 
     /**
      * get the file url
-     * @return void
+     *
+     * @param string $path file path
+     * @param boolean|null $asApi
+     * @return string|null
      */
     public static function getUrl($path, ?bool $asApi = false) : ?string
     {
@@ -96,13 +99,18 @@ class File extends ModelBase
         return admin_url($name);
     }
 
+
     /**
      * Save file info to database.
      * *Please call this function before store file.
-     * @param string $fileName
-     * @return File saved file path
+     *
+     * @param string $dirname directory name
+     * @param string $filename file name
+     * @param string $unique_filename unique file name.
+     * @param boolean $override if override same file on server
+     * @return File
      */
-    public static function saveFileInfo(string $dirname, string $filename = null, string $unique_filename = null, $override = false)
+    public static function saveFileInfo(string $dirname, string $filename = null, string $unique_filename = null, $override = false) : File
     {
         $uuid = make_uuid();
 
@@ -150,9 +158,13 @@ class File extends ModelBase
     }
 
     /**
-     * get file object(laravel)
+     * Get file object(laravel)
+     *
+     * @param string $uuid
+     * @param \Closure $authCallback
+     * @return \Illuminate\Contracts\Filesystem\Filesystem
      */
-    public static function getFile($uuid, Closure $authCallback = null)
+    public static function getFile($uuid, \Closure $authCallback = null)
     {
         $data = static::getData($uuid);
         if (!$data) {
@@ -184,7 +196,15 @@ class File extends ModelBase
         // if match path, return this model's id
         if (array_get($value, 'value.' . array_get($uuidObj, 'column_name')) == $path) {
             return $value;
+        } else {
+            $file_uuid = collect($custom_value->file_uuids())->first(function ($file_uuid) {
+                return isMatchString(array_get($file_uuid, 'uuid'), $this->uuid);
+            });
+            if (isset($file_uuid)) {
+                return $value;
+            }
         }
+        
 
         return null;
     }
@@ -192,9 +212,9 @@ class File extends ModelBase
     /**
      * Save file table on db and store the uploaded file on a filesystem disk.
      *
-     * @param  string  $disk disk name
-     * @param  string  $path directory path
-     * @return string|false
+     * @param  string  $path directory and file path(Please join.)
+     * @param  string  $content set item content
+     * @return File
      */
     public static function put($path, $content, $override = false)
     {
@@ -203,13 +223,13 @@ class File extends ModelBase
         return $file;
     }
     
+    
     /**
      * Save file table on db and store the uploaded file on a filesystem disk.
      *
-     * @param  string  $content file content
-     * @param  string  $disk disk name
-     * @param  string  $path directory path
-     * @return string|false
+     * @param  \Illuminate\Http\UploadedFile $content file content
+     * @param string $dirname
+     * @return File
      */
     public static function store($content, $dirname)
     {
@@ -217,18 +237,17 @@ class File extends ModelBase
         $content->store($file->local_dirname, config('admin.upload.disk'));
         return $file;
     }
-    
+
     /**
      * Save file table on db and store the uploaded file on a filesystem disk.
      *
-     * @param  string  $content file content
+     * @param  string|\Illuminate\Http\UploadedFile $content file content
      * @param  string  $dirname directory path
      * @param  string  $name file name. the name is shown by display
-     * @param  string  $local_filename local file name.
      * @param  bool  $override if file already exists, override
-     * @return string|false
+     * @return File
      */
-    public static function storeAs($content, $dirname, $name, $override = false)
+    public static function storeAs($content, string $dirname, string $name, bool $override = false) : File
     {
         $file = static::saveFileInfo($dirname, $name, null, $override);
         if (is_string($content)) {
@@ -241,14 +260,24 @@ class File extends ModelBase
 
     /**
      * Get file model using path or uuid
+     *
+     * @param string|File $pathOrUuids
+     * @return File|null
      */
-    protected static function getData($pathOrUuids)
+    public static function getData($pathOrUuids)
     {
         if (is_nullorempty($pathOrUuids)) {
             return null;
         }
 
+        if ($pathOrUuids instanceof File) {
+            return $pathOrUuids;
+        }
+
         $funcUuid = function ($pathOrUuid) {
+            if (!is_uuid($pathOrUuid)) {
+                return null;
+            }
             return static::where('uuid', $pathOrUuid)->first();
         };
         $funcPath = function ($pathOrUuid) {

@@ -14,7 +14,7 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
     use Traits\UseRequestSessionTrait;
     use Traits\ClearCacheTrait;
     use Traits\AutoSUuidTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\TemplateTrait;
     use Traits\UniqueKeyCustomColumnTrait;
 
@@ -22,6 +22,9 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
     protected $casts = ['options' => 'json'];
     protected $guarded = ['id', 'suuid'];
     // protected $with = ['custom_table'];
+
+    private $_column_item;
+
 
     /**
      * $custom available_characters
@@ -146,6 +149,11 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
         return $query->whereIn('options->required', [1, "1", true]);
     }
 
+    public function scopeSelectTargetTable($query, $id)
+    {
+        return $query->whereIn('options->select_target_table', [$id, strval($id)]);
+    }
+
     public function getCustomTableCacheAttribute()
     {
         return CustomTable::getEloquent($this);
@@ -153,7 +161,12 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
 
     public function getColumnItemAttribute()
     {
-        return ColumnItems\CustomItem::getItem($this);
+        if (isset($this->_column_item)) {
+            return $this->_column_item;
+        }
+
+        $this->_column_item = ColumnItems\CustomItem::getItem($this);
+        return $this->_column_item;
     }
 
     public function getSelectTargetTableAttribute()
@@ -162,6 +175,10 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
             return CustomTable::getEloquent($this->column_type);
         }
         return CustomTable::getEloquent($this->getOption('select_target_table'));
+    }
+    public function getSelectTargetViewAttribute()
+    {
+        return CustomView::getEloquent($this->getOption('select_target_view'));
     }
 
     public function getRequiredAttribute()
@@ -209,23 +226,6 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
         return boolval($this->system_flg);
     }
 
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    public function forgetOption($key)
-    {
-        return $this->forgetJson('options', $key);
-    }
-    public function clearOption()
-    {
-        return $this->clearJson('options');
-    }
-    
     public function deletingChildren()
     {
         $this->custom_form_columns()->delete();
@@ -258,6 +258,11 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
         static::saving(function ($model) {
             $model->prepareJson('options');
         });
+        
+        static::saved(function ($model) {
+            // create or drop index --------------------------------------------------
+            $model->alterColumn();
+        });
 
         // delete event
         static::deleting(function ($model) {
@@ -266,6 +271,12 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
 
             // execute alter column
             $model->alterColumn(true);
+        });
+
+        // deleted event
+        static::deleted(function ($model) {
+            $model->custom_table_cache->getValueModel()->query()->
+                updateRemovingJsonKey("value->{$model->column_name}");
         });
     }
 
@@ -322,6 +333,7 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
         // Create index --------------------------------------------------
         $table = $this->custom_table_cache;
         $column_name = $this->column_name;
+        $column_type = $this->column_item->getVirtualColumnTypeName();
 
         //DB table name
         $db_table_name = getDBTableName($table);
@@ -345,14 +357,13 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
         }
         // if index_enabled = true, not exists, then create index
         elseif ($index_enabled && !$exists) {
-            \Schema::alterIndexColumn($db_table_name, $db_column_name, $index_name, $column_name);
+            \Schema::alterIndexColumn($db_table_name, $db_column_name, $index_name, $column_name, $column_type);
             System::clearCache();
         }
     }
     
     /**
      * Get index column column name. This function uses only search-enabled column.
-     * @param CustomColumn|array $obj
      * @param boolean $alterColumn if not exists column on db, execute alter column. if false, only get name
      * @return string
      */
@@ -371,7 +382,7 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
     /**
      * Get where query. index name or value->XXXX
      *
-     * @return void
+     * @return string database query key.
      */
     public function getQueryKey()
     {
@@ -379,8 +390,21 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
     }
 
     /**
+     * Is get all user or org. Not filtering display table.
+     *
+     * @return boolean
+     */
+    public function isGetAllUserOrganization()
+    {
+        return ColumnType::isUserOrganization($this->column_type) && boolval($this->getOption('showing_all_user_organizations'));
+    }
+
+
+    /**
      * Set customAvailableCharacters
-     * @param callable $callback
+     *
+     * @param array $array
+     * @return void
      */
     public static function customAvailableCharacters(array $array)
     {
@@ -391,7 +415,7 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
      * Get AvailableCharacters Definitions.
      * Default and Append custom.
      *
-     * @return void
+     * @return \Illuminate\Support\Collection
      */
     public static function getAvailableCharacters()
     {
@@ -418,18 +442,6 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
     }
 
     /**
-     * Get select table relation name.
-     * @param CustomColumn|array $obj
-     * @param boolean $alterColumn if not exists column on db, execute alter column. if false, only get name
-     * @return string
-     */
-    public function getSelectTableRelationName()
-    {
-        $name = 'select_table_'.array_get($this->custom_table_cache, 'suuid') . '_' . $this->select_target_table->suuid . '_' . $this->id;
-        return $name;
-    }
-
-    /**
      * Create laravel-admin select box options. for column_type "select", "select_valtext"
      */
     public function createSelectOptions()
@@ -450,7 +462,7 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
 
         if (is_string($select_item)) {
             $str = str_replace(array("\r\n","\r","\n"), "\n", $select_item);
-            if (isset($str) && mb_strlen($str) > 0) {
+            if (!is_nullorempty($str) && mb_strlen($str) > 0) {
                 // loop for split new line
                 $array = explode("\n", $str);
                 foreach ($array as $a) {
@@ -475,14 +487,14 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
             // $isValueText is true(split comma)
             if ($isValueText) {
                 $splits = explode(',', $item);
-                if (count($splits) > 1) {
-                    $options[mbTrim($splits[0])] = mbTrim($splits[1]);
-                } else {
-                    $options[mbTrim($splits[0])] = mbTrim($splits[0]);
-                }
+                $key = mbTrim($splits[0]);
+                $val = count($splits) > 1 ? mbTrim($splits[1]) : mbTrim($splits[0]);
             } else {
-                $options[mbTrim($item)] = mbTrim($item);
+                $key = mbTrim($item);
+                $val = mbTrim($item);
             }
+
+            $options[$key] = $val;
         }
     }
 
@@ -514,7 +526,7 @@ class CustomColumn extends ModelBase implements Interfaces\TemplateImporterInter
     /**
      * import template (for setting other custom column id)
      */
-    public static function importTemplateRelationColumn($json, $is_update, $options = [])
+    public static function importTemplateLinkage($json, $is_update, $options = [])
     {
         $custom_table = array_get($options, 'parent');
         $column_name = array_get($json, 'column_name');

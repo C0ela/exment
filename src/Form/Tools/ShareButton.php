@@ -9,20 +9,17 @@ use Encore\Admin\Facades\Admin;
  */
 class ShareButton
 {
-    protected $custom_table;
     protected $id;
+    protected $url;
     
-    public function __construct($custom_table, $id)
+    public function __construct($id, $url)
     {
-        $this->custom_table = $custom_table;
         $this->id = $id;
+        $this->url = $url;
     }
 
     protected function script($suuid, $label)
     {
-        $table_name = array_get($this->custom_table, 'table_name');
-        // create url
-        $url = admin_urls("data", $table_name, $this->id, "shareClick");
         $confirm = trans('admin.confirm');
         $cancel = trans('admin.cancel');
 
@@ -31,7 +28,7 @@ class ShareButton
         return <<<EOT
 
         $('#menu_button_$suuid').off('click').on('click', function(){
-            Exment.CommonEvent.ShowSwal("$url", {
+            Exment.CommonEvent.ShowSwal("$this->url", {
                 title: "$label",
                 confirm:"$confirm",
                 cancel:"$cancel",
@@ -49,8 +46,6 @@ EOT;
         $label = exmtrans('common.shared');
         // get uuid
         $suuid = short_uuid();
-        $table_name = array_get($this->custom_table, 'table_name');
-        $url = admin_urls("data", $table_name, $this->id, "shareClick");
         //Admin::script($this->script($suuid, $label));
 
         return view('exment::tools.modal-button', [
@@ -58,7 +53,7 @@ EOT;
             'label' => $label ?? null,
             'button_class' => 'btn-warning',
             'icon' => 'fa-share',
-            'url' => $url
+            'url' => $this->url
         ]);
     }
     

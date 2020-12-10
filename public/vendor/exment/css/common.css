@@ -3712,6 +3712,22 @@ body .navbar-nav > .notifications-menu > .dropdown-menu, .navbar-nav > .messages
   overflow-x: hidden;
 }
 
+.modal-body-overflow-hidden .modal-body {
+  overflow: hidden;
+}
+
+.modal-heightfix.modal-dialog {
+  height: 90%;
+}
+
+.modal-heightfix .modal-content {
+  height: 100%;
+}
+
+.modal-heightfix .modal-body {
+  height: calc(100vh - 140px);
+}
+
 .modal-tile .groupheader {
   font-size: 17px;
 }
@@ -3766,6 +3782,14 @@ body .navbar-nav > .notifications-menu > .dropdown-menu, .navbar-nav > .messages
   font-size: 12px;
 }
 
+.mce-window.mce-in .mce-open {
+  display: none;
+}
+
+.show-tinymce img {
+  max-width: 100%;
+}
+
 .has-error .btn-valuemodal, .has-error .text-valuemodal, .has-error .checkbox, .has-error .checkbox-inline, .has-error .control-label, .has-error .help-block, .has-error .radio, .has-error .radio-inline {
   color: #dd4b39 !important;
 }
@@ -3784,6 +3808,11 @@ body .navbar-nav > .notifications-menu > .dropdown-menu, .navbar-nav > .messages
 
 .bootstrap-duallistbox-container label {
   font-size: 0.9em;
+}
+
+.file-drop-zone .file-drop-zone-title {
+  padding-top: 35px;
+  padding-bottom: 35px;
 }
 
 /* flexheight */

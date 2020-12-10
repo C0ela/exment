@@ -20,7 +20,7 @@ class Menu extends AdminMenu implements Interfaces\TemplateImporterInterface
 {
     use Traits\TemplateTrait;
     use Traits\UseRequestSessionTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     
     /**
      * @var string
@@ -33,7 +33,7 @@ class Menu extends AdminMenu implements Interfaces\TemplateImporterInterface
     public static $templateItems = [
         'excepts' => [
             'import' => ['permission'],
-            'export' => ['menu_target', 'permission'],
+            'export' => ['menu_target', 'permission', 'menu_target_view'],
         ],
         'uniqueKeys' => ['menu_type', 'menu_name'],
         'langs' => [
@@ -53,6 +53,17 @@ class Menu extends AdminMenu implements Interfaces\TemplateImporterInterface
                     ]
                 ],
                 'uniqueKeyFunction' => 'getUniqueKeyValues',
+            ],
+            [
+                'replaceNames' => [
+                    [
+                        'replacingName' => 'options.menu_target_view',
+                        'replacedName' => [
+                            'suuid' => 'options.menu_target_view_suuid',
+                        ]
+                    ]
+                ],
+                'uniqueKeyClassName' => CustomView::class,
             ],
         ]
     ];
@@ -77,13 +88,9 @@ class Menu extends AdminMenu implements Interfaces\TemplateImporterInterface
         return $this->setOption('menu_target_view', $value);
     }
 
-    public function getOption($key, $default = null)
+    public static function getTableName()
     {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
+        return with(new static)->getTable();
     }
 
     /**
@@ -339,16 +346,6 @@ class Menu extends AdminMenu implements Interfaces\TemplateImporterInterface
             'menu_target_name' => $menu_target_name,
             'uri' => $uri,
         ];
-        
-
-        // if has children, loop
-        if (array_key_value_exists('children', $menu)) {
-            foreach (array_get($menu, 'children') as $child) {
-                // set children menu item recursively to $menus.
-                $menus = array_merge($menus, static::getTemplateMenuItems($child, $target_tables, $menulist));
-            }
-        }
-        return $menus;
     }
     
     /**

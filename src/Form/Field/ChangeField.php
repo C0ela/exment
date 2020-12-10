@@ -44,6 +44,11 @@ class ChangeField extends Field
     protected $replaceWord = 'condition_value';
 
     /**
+     * @var string
+     */
+    protected $hasManyTableClass = 'has-many-table';
+
+    /**
      *
      * @var bool
      */
@@ -52,7 +57,7 @@ class ChangeField extends Field
     /**
      * decide admin field element Closure fucntioon
      *
-     * @var Closure
+     * @var \Closure
      */
     protected $adminField;
 
@@ -94,8 +99,8 @@ class ChangeField extends Field
     /**
      * Set event trigger column for change event
      *
-     * @param [type] $ajax
-     * @return void
+     * @param string $eventTriggerSelector
+     * @return $this
      */
     public function setEventTrigger($eventTriggerSelector)
     {
@@ -107,8 +112,8 @@ class ChangeField extends Field
     /**
      * Set event target column for change event
      *
-     * @param [type] $ajax
-     * @return void
+     * @param string $eventTargetSelector
+     * @return $this
      */
     public function setEventTarget($eventTargetSelector)
     {
@@ -120,12 +125,25 @@ class ChangeField extends Field
     /**
      * Show Condition Key
      *
-     * @param [type] $ajax
-     * @return void
+     * @param string $showConditionKey
+     * @return $this
      */
     public function showConditionKey($showConditionKey)
     {
         $this->showConditionKey = $showConditionKey;
+
+        return $this;
+    }
+
+    /**
+     * hasManyTableClass
+     *
+     * @param string $hasManyTableClass
+     * @return $this
+     */
+    public function hasManyTableClass($hasManyTableClass)
+    {
+        $this->hasManyTableClass = $hasManyTableClass;
 
         return $this;
     }
@@ -151,15 +169,16 @@ class ChangeField extends Field
     protected function script()
     {
         $ajax = $this->ajax;
-        $filterKind = $this->filterKind?? FilterKind::VIEW;
+        $filterKind = $this->filterKind ?? FilterKind::VIEW;
         $eventTriggerSelector = $this->eventTriggerSelector;
         $eventTargetSelector = $this->eventTargetSelector;
         $showConditionKey = $this->showConditionKey;
+        $hasManyTableClass = $this->hasManyTableClass;
         $replaceSearch = $this->replaceSearch;
         $replaceWord = $this->replaceWord;
 
         $script = <<<EOT
-            Exment.ChangeFieldEvent.ChangeFieldEvent('$ajax', '$eventTriggerSelector', '$eventTargetSelector', '$replaceSearch', '$replaceWord', '$showConditionKey', '$filterKind');
+            Exment.ChangeFieldEvent.ChangeFieldEvent('$ajax', '$eventTriggerSelector', '$eventTargetSelector', '$replaceSearch', '$replaceWord', '$showConditionKey', '$hasManyTableClass');
 EOT;
 
         static::$scripts[] = $script;

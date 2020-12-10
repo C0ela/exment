@@ -98,11 +98,24 @@ class ModelBase extends Model
         });
         
         static::saved(function ($model) {
-            $classname = get_called_class();
-            if (\method_exists($classname, 'clearCacheTrait')) {
-                $classname::clearCacheTrait();
-            }
+            static::callClearCache();
         });
+        static::deleted(function ($model) {
+            static::callClearCache();
+        });
+    }
+
+    /**
+     * Call clear cache if definition
+     *
+     * @return void
+     */
+    protected static function callClearCache()
+    {
+        $classname = get_called_class();
+        if (\method_exists($classname, 'clearCacheTrait')) {
+            $classname::clearCacheTrait();
+        }
     }
 
     /**
@@ -156,7 +169,7 @@ class ModelBase extends Model
         // get table
         $obj = static::{$fucnName}(function ($table) use ($query_key, $obj) {
             return array_get($table, $query_key) == $obj;
-        });
+        }, false);
 
         if (is_nullorempty($obj)) {
             return null;
@@ -183,5 +196,16 @@ class ModelBase extends Model
     protected function getUserValue($column)
     {
         return CustomTable::getEloquent(SystemTableName::USER)->getValueModel($this->{$column}, true);
+    }
+
+    /**
+     * Create a new Eloquent query builder for the model.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @return \Exceedone\Exment\Database\Eloquent\ExtendedBuilder
+     */
+    public function newEloquentBuilder($query)
+    {
+        return new \Exceedone\Exment\Database\Eloquent\ExtendedBuilder($query);
     }
 }

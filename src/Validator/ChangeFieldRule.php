@@ -10,6 +10,10 @@ use Exceedone\Exment\ConditionItems\ConditionItemBase;
  */
 class ChangeFieldRule implements Rule
 {
+    protected $custom_table;
+    protected $label;
+    protected $target;
+
     public function __construct(?CustomTable $custom_table, $label, $target)
     {
         $this->custom_table = $custom_table;
@@ -28,17 +32,17 @@ class ChangeFieldRule implements Rule
     {
 //        $prefix = substr($attribute, 0, strrpos($attribute, '.'));
 
-        $item = ConditionItemBase::getItem($this->custom_table, $this->target);
-        $field = getCustomField(array_get($this->data, $prefix), $field_label);
+        // $item = ConditionItemBase::getItem($this->custom_table, $this->target);
+        // $field = getCustomField(array_get($this->data, $prefix), $field_label);
 
-        if (!$validator = $field->getValidator([$field->column() => $value])) {
-            return true;
-        }
+        // if (!$validator = $field->getValidator([$field->column() => $value])) {
+        //     return true;
+        // }
 
-        if (($validator instanceof AdminValidator) && !$validator->passes()) {
-            $parameters[] = $validator->messages->first();
-            return false;
-        }
+        // if (($validator instanceof AdminValidator) && !$validator->passes()) {
+        //     $parameters[] = $validator->messages->first();
+        //     return false;
+        // }
 
         return true;
 

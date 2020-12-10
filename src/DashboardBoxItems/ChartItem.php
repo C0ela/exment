@@ -10,12 +10,12 @@ use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Enums\ChartAxisType;
 use Exceedone\Exment\Enums\ChartOptionType;
 use Exceedone\Exment\Enums\ChartType;
-use Exceedone\Exment\Enums\DashboardType;
 use Exceedone\Exment\Enums\DashboardBoxType;
 use Exceedone\Exment\Enums\Permission;
 use Exceedone\Exment\Enums\SystemColumn;
 use Exceedone\Exment\Enums\ViewType;
 use Exceedone\Exment\Enums\ViewKindType;
+use Exceedone\Exment\Enums\DashboardType;
 
 class ChartItem implements ItemInterface
 {
@@ -99,7 +99,10 @@ class ChartItem implements ItemInterface
             return exmtrans('dashboard.message.need_setting');
         }
 
-        extract($result);
+        $axisx_label = $result['axisx_label'];
+        $axisy_label = $result['axisy_label'];
+        $chart_data = $result['chart_data'];
+        $chart_label = $result['chart_label'];
 
         return view('exment::dashboard.chart.chart', [
             'suuid' => $this->dashboard_box->suuid,
@@ -127,7 +130,7 @@ class ChartItem implements ItemInterface
         $view_column_x = CustomViewSummary::getSummaryViewColumn($this->axis_x);
         $view_column_y = CustomViewSummary::getSummaryViewColumn($this->axis_y);
 
-        if (!isset($view_column_x) || !isset($view_column_y)) {
+        if (is_nullorempty($view_column_x) || is_nullorempty($view_column_y)) {
             return false;
         }
 
@@ -135,7 +138,6 @@ class ChartItem implements ItemInterface
         $model = $this->custom_table->getValueModel()->query();
 
         // get data
-        \Exment::user()->filterModel($model, $this->custom_view);
         $items = $model->get();
 
         $chart_label = $items->map(function ($val) use ($view_column_x) {
@@ -170,12 +172,12 @@ class ChartItem implements ItemInterface
         $view_column_x_list = $this->custom_view->custom_view_columns;
         $view_column_y = CustomViewSummary::getSummaryViewColumn($this->axis_y);
 
-        if (!isset($view_column_x_list) || count(($view_column_x_list)) == 0 || !isset($view_column_y)) {
+        if (is_nullorempty($view_column_x_list) || count(($view_column_x_list)) == 0 || is_nullorempty($view_column_y)) {
             return false;
         }
 
         $item_x_list = collect($view_column_x_list)->map(function ($item) {
-            $summary_index = $item->view_column_type . '_' . $item->id;
+            $summary_index = ViewKindType::DEFAULT . '_' . $item->id;
             return $item->column_item->options([
                 'summary' => true,
                 'summary_index' => $summary_index
@@ -184,10 +186,10 @@ class ChartItem implements ItemInterface
         $item_y = $view_column_y->column_item;
 
         // create model for getting data --------------------------------------------------
-        $model = $this->custom_table->getValueModel()->query();
+        $query = $this->custom_table->getValueModel()->query();
 
         // get data
-        $datalist = $this->custom_view->getValueSummary($model, $this->custom_table->table_name)->get();
+        $datalist = $this->custom_view->getQuery($query)->get();
         $chart_label = $datalist->map(function ($val) use ($item_x_list) {
             $labels = $item_x_list->map(function ($item_x) use ($val) {
                 $item = $item_x->setCustomValue($val);
@@ -252,7 +254,7 @@ class ChartItem implements ItemInterface
                         return array_get($value, 'view_kind_type') != ViewKindType::CALENDAR;
                     })
                     ->filter(function ($value) use ($dashboard) {
-                        if (array_get($dashboard, 'dashboard_type') != DashBoardType::SYSTEM) {
+                        if (array_get($dashboard, 'dashboard_type') != DashboardType::SYSTEM) {
                             return true;
                         }
                         return array_get($value, 'view_type') == ViewType::SYSTEM;
@@ -264,7 +266,7 @@ class ChartItem implements ItemInterface
             );
 
         // link to manual
-        $form->description(sprintf(exmtrans("chart.help.chartitem_manual"), getManualUrl('dashboard?id='.exmtrans('chart.chartitem_manual'))));
+        $form->descriptionHtml(sprintf(exmtrans("chart.help.chartitem_manual"), getManualUrl('dashboard?id='.exmtrans('chart.chartitem_manual'))));
 
         $form->select('chart_axisx', exmtrans("dashboard.dashboard_box_options.chart_axisx"))
             ->required()
@@ -318,21 +320,17 @@ class ChartItem implements ItemInterface
         $script = <<<EOT
         function setChartOptions(val) {
             if (val == 'pie') {
-                $('#chart_options > label:nth-child(1)').show();
-                $('#chart_options > label:nth-child(2)').hide();
-                $('#chart_axis_label').parent().hide();
-                $('#chart_axis_name').parent().hide();
+                $('#chart_options > .icheck:nth-child(1)').show();
+                $('#chart_options > .icheck:nth-child(2)').hide();
             } else {
-                $('#chart_options > label:nth-child(1)').hide();
-                $('#chart_options > label:nth-child(2)').show();
-                $('#chart_axis_label').parent().show();
-                $('#chart_axis_name').parent().show();
+                $('#chart_options > .icheck:nth-child(1)').hide();
+                $('#chart_options > .icheck:nth-child(2)').show();
             }
         }
         setChartOptions($('.options_chart_type').val());
 
-        $(document).off('change', ".options_chart_type");
-        $(document).on('change', ".options_chart_type", function () {
+        $(document).off('change.exment_dashboard', ".options_chart_type");
+        $(document).on('change.exment_dashboard', ".options_chart_type", function () {
             setChartOptions($(this).val());
         });
 EOT;
@@ -371,11 +369,13 @@ EOT;
     /**
      * get chart color array.
      *
-     * @return chart color array
+     * @return array Chart color array
      */
     protected function getChartColor($datacnt)
     {
-        $chart_color = config('exment.chart_backgroundColor', ['red']);
+        $chart_color = config('exment.chart_backgroundColor');
+        $chart_color = stringToArray(empty($chart_color)? 'red': $chart_color);
+
         if ($this->chart_type == ChartType::PIE) {
             $colors = [];
             for ($i = 0; $i < $datacnt; $i++) {

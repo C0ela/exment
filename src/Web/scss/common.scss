@@ -410,6 +410,23 @@ body .navbar-nav>.notifications-menu>.dropdown-menu, .navbar-nav>.messages-menu>
     overflow-y: auto;
     overflow-x: hidden;
 }
+.modal-body-overflow-hidden .modal-body{
+    overflow: hidden;
+}
+
+.modal-heightfix{
+    &.modal-dialog{
+        height: 90%;
+    }
+
+    .modal-content{
+        height:100%;
+    }
+
+    .modal-body{
+        height: calc(100vh - 140px);
+    }
+}
 
 .modal-tile {
     .groupheader{
@@ -470,7 +487,13 @@ body .navbar-nav>.notifications-menu>.dropdown-menu, .navbar-nav>.messages-menu>
     
 }
 
-
+// tinymce
+.mce-window.mce-in .mce-open{
+    display: none;
+}
+.show-tinymce img{
+    max-width: 100%;
+}
 
 .has-error {
     .btn-valuemodal, .text-valuemodal, .checkbox, .checkbox-inline, .control-label, .help-block, .radio, .radio-inline{
@@ -494,6 +517,11 @@ body .navbar-nav>.notifications-menu>.dropdown-menu, .navbar-nav>.messages-menu>
 }
 .bootstrap-duallistbox-container label{
     font-size: 0.9em;
+}
+
+.file-drop-zone .file-drop-zone-title{
+    padding-top: 35px;
+    padding-bottom: 35px;
 }
 
 /* flexheight */

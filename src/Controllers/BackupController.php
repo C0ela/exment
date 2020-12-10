@@ -10,18 +10,26 @@ use Illuminate\Validation\Rule;
 use Exceedone\Exment\Model\System;
 use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Enums;
-use Exceedone\Exment\Console\BackupRestoreTrait;
 use Exceedone\Exment\Form\Widgets\ModalForm;
+use Exceedone\Exment\Services\BackupRestore;
+use Exceedone\Exment\Exceptions\BackupRestoreCheckException;
 use Validator;
 use DB;
 
 class BackupController extends AdminControllerBase
 {
-    use BackupRestoreTrait;
+    protected $backup;
+    protected $restore;
 
-    public function __construct(Request $request)
+    public function __construct()
     {
         $this->setPageInfo(exmtrans("backup.header"), exmtrans("backup.header"), exmtrans("backup.description"), 'fa-database');
+
+        $this->backup = new BackupRestore\Backup;
+        $this->backup->initBackupRestore();
+
+        $this->restore = new BackupRestore\Restore;
+        $this->restore->initBackupRestore();
     }
     
     /**
@@ -32,13 +40,21 @@ class BackupController extends AdminControllerBase
     public function index(Request $request, Content $content)
     {
         $this->AdminContent($content);
+        $disk = $this->backup->disk();
         
-        $this->initBackupRestore();
-        $disk = $this->disk();
+        // check backup execute
+        try {
+            $this->backup->check();
+        } catch (BackupRestoreCheckException $ex) {
+            admin_error(exmtrans('common.error'), $ex->getMessage());
+            return $content;
+        }
 
         // get all archive files
-        $files = array_filter($disk->files('list'), function ($file) {
-            return preg_match('/list\/\d+\.zip$/i', $file);
+        $files = collect($disk->files('list'))->filter(function ($file) {
+            return preg_match('/list\/' . Define::RULES_REGEX_BACKUP_FILENAME . '\.zip$/i', $file);
+        })->sortByDesc(function ($file) use ($disk) {
+            return $disk->lastModified($file);
         });
         // edit table row data
         $rows = [];
@@ -51,22 +67,21 @@ class BackupController extends AdminControllerBase
             ];
         }
 
+        $rows = $this->restore->list();
+
         $content->row(view(
             'exment::backup.index',
             [
                 'files' => $rows,
                 'restore_keyword' => Define::RESTORE_CONFIRM_KEYWORD,
                 'restore_text' => exmtrans('common.message.execution_takes_time') . exmtrans('backup.message.restore_confirm_text') . exmtrans('common.message.input_keyword', Define::RESTORE_CONFIRM_KEYWORD),
+                'editname_text' => exmtrans('backup.message.edit_filename_text'),
             ]
         ));
 
         // create setting form
         $content->row($this->settingFormBox());
 
-        // ※SQLServerはバックアップ未対応。※一時なので、日本語固定で表示
-        if (config('database.default') == 'sqlsrv') {
-            admin_error('SQL Server未対応', '現在、SQL Serverではバックアップ・リストア未対応です。ご了承ください。');
-        }
         
         return $content;
     }
@@ -132,7 +147,7 @@ class BackupController extends AdminControllerBase
 
             admin_toastr(trans('admin.save_succeeded'));
             return redirect(admin_url('backup'));
-        } catch (Exception $exception) {
+        } catch (\Exception $exception) {
             //TODO:error handling
             DB::rollback();
         }
@@ -145,8 +160,7 @@ class BackupController extends AdminControllerBase
      */
     public function delete(Request $request)
     {
-        $this->initBackupRestore();
-        $disk = $this->disk();
+        $disk = $this->backup->disk();
         
         $data = $request->all();
 
@@ -185,7 +199,8 @@ class BackupController extends AdminControllerBase
         $data = $request->all();
 
         $target = System::backup_target();
-        $result = \Artisan::call('exment:backup', ['--target' => $target]);
+
+        $result = $this->backup->execute($target);
 
         if (isset($result) && $result === 0) {
             return response()->json([
@@ -207,23 +222,25 @@ class BackupController extends AdminControllerBase
     {
         $ymdhms = urldecode($arg);
 
+        // validate "\", "/", "."
         $validator = Validator::make(['ymdhms' => $ymdhms], [
-            'ymdhms' => 'required|numeric'
+            'ymdhms' => ['required', 'regex:/' . Define::RULES_REGEX_BACKUP_FILENAME . '/']
         ]);
 
         if (!$validator->passes()) {
             abort(404);
         }
 
-        $this->initBackupRestore($ymdhms);
-
-        $path = $this->diskService->diskItem()->filePath();
-        $exists = $this->disk()->exists($path);
+        $this->backup->initBackupRestore($ymdhms);
+        $disk = $this->backup->disk();
+        
+        $path = $this->backup->diskService()->diskItem()->filePath();
+        $exists = $disk->exists($path);
         if (!$exists) {
             abort(404);
         }
 
-        return downloadFile($path, $this->disk());
+        return downloadFile($path, $disk);
     }
 
     /**
@@ -231,28 +248,50 @@ class BackupController extends AdminControllerBase
      *
      * @return Content
      */
-    protected function importModal()
+    protected function importModal($file_key = null)
     {
         $import_path = admin_url(url_join('backup', 'import'));
         // create form fields
         $form = new ModalForm();
         $form->modalAttribute('id', 'data_import_modal');
 
-        $fileOption = Define::FILE_OPTION();
+        $fileOption = array_merge(
+            Define::FILE_OPTION(),
+            [
+                'showPreview' => false,
+                'dropZoneEnabled' => false,
+            ]
+        );
+
         $form->action($import_path);
 
-        $form->file('upload_zipfile', exmtrans('backup.upload_zipfile'))
+        if (isset($file_key)) {
+            $form->display('restore_zipfile', exmtrans('backup.restore_zipfile'))
+                ->setWidth(8, 3)
+                ->displayText("$file_key.zip")->escape(false);
+            $form->hidden('restore_zipfile')->default($file_key);
+        } else {
+            $form->file('upload_zipfile', exmtrans('backup.upload_zipfile'))
             ->rules('mimes:zip')->setWidth(8, 3)->addElementClass('custom_table_file')
             ->attribute(['accept' => ".zip"])
             ->removable()
             ->required()
             ->options($fileOption)
-            ->help(exmtrans('backup.help.file_name') . array_get($fileOption, 'maxFileSizeHelp'));
+            ->help(exmtrans(
+                'backup.help.file_name',
+                array_get($fileOption, 'maxFileSizeHelp'),
+                getManualUrl('backup#'.exmtrans('backup.filesize_over'))
+            ));
+        }
 
         $form->text('restore_keyword', exmtrans('common.keyword'))
             ->required()
             ->setWidth(8, 3)
             ->help(exmtrans('common.message.input_keyword', Define::RESTORE_CONFIRM_KEYWORD));
+
+        $form->display('restore_caution', exmtrans('backup.restore_caution'))
+            ->setWidth(8, 3)
+            ->displayText(exmtrans('backup.message.restore_caution'))->escape(false);
 
         return getAjaxResponse([
             'body'  => $form->render(),
@@ -270,7 +309,8 @@ class BackupController extends AdminControllerBase
 
         // validation
         $validator = Validator::make($request->all(), [
-            'upload_zipfile' => 'required|file',
+            'upload_zipfile' => 'required_without:restore_zipfile|file',
+            'restore_zipfile' => 'required_without:upload_zipfile',
         ]);
 
         if (!$validator->passes()) {
@@ -294,16 +334,20 @@ class BackupController extends AdminControllerBase
             ]);
         }
 
-        if ($request->has('upload_zipfile')) {
+        if ($request->has('restore_zipfile')) {
+            $filename = $request->get('restore_zipfile');
+            try {
+                $result = $this->restore->execute($filename);
+            } finally {
+            }
+        } elseif ($request->has('upload_zipfile')) {
             // get upload file
             $file = $request->file('upload_zipfile');
             // store uploaded file
             $filename = $file->storeAs('', $file->getClientOriginalName(), Define::DISKNAME_ADMIN_TMP);
             try {
-                \Artisan::call('down');
-                $result = \Artisan::call('exment:restore', ['file' => $filename, '--tmp' => 1]);
+                $result = $this->restore->execute($filename, true);
             } finally {
-                \Artisan::call('up');
             }
         }
         
@@ -342,10 +386,8 @@ class BackupController extends AdminControllerBase
 
         if ($validator->passes()) {
             try {
-                \Artisan::call('down');
-                $result = \Artisan::call('exment:restore', ['file' => $data['file']]);
+                $result = $this->restore->execute($data['file']);
             } finally {
-                \Artisan::call('up');
             }
         }
 
@@ -365,5 +407,59 @@ class BackupController extends AdminControllerBase
                 'toastr' => exmtrans("backup.message.restore_error"),
             ]);
         }
+    }
+    
+    /**
+     * edit file name
+     *
+     * @return Content
+     */
+    public function editname(Request $request)
+    {
+        $data = $request->all();
+
+        // validate "\", "/", "."
+        $validator = Validator::make($data, [
+            'file' => ['required'],
+            'filename' => ['required', 'max:30', 'regex:/^' . Define::RULES_REGEX_BACKUP_FILENAME . '$/'],
+        ]);
+
+        if ($validator->fails()) {
+            return getAjaxResponse([
+                'result'  => false,
+                'swal' => exmtrans('common.error'),
+                'swaltext' => array_first(array_flatten($validator->getMessages())),
+            ]);
+        }
+
+        $disk = $this->backup->disk();
+
+        $oldfile = path_join('list', $data['file'] . '.zip');
+        $newfile = path_join('list', $data['filename'] . '.zip');
+
+        // check same file name
+        if ($disk->exists($newfile)) {
+            return getAjaxResponse([
+                'result'  => false,
+                'swal' => exmtrans('common.error'),
+                'swaltext' => exmtrans('backup.message.same_filename'),
+            ]);
+        }
+
+        if (!$disk->exists($oldfile)) {
+            return getAjaxResponse([
+                'result'  => false,
+                'swal' => exmtrans('common.error'),
+                'swaltext' => exmtrans('backup.message.notfound_file'),
+            ]);
+        }
+
+        // get all archive files
+        $disk->move($oldfile, $newfile);
+
+        return getAjaxResponse([
+            'result'  => true,
+            'message' => trans('admin.update_succeeded'),
+        ]);
     }
 }

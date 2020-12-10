@@ -1,6 +1,7 @@
 <?php
 namespace Exceedone\Exment\Services\Plugin;
 
+use Exceedone\Exment\Model;
 use Exceedone\Exment\Model\CustomValue;
 
 /**
@@ -17,9 +18,9 @@ trait PluginEventTrait
     /**
      * Init event
      *
-     * @param [type] $plugin
-     * @param [type] $custom_table
-     * @param [type] $custom_value
+     * @param Model\Plugin $plugin
+     * @param Model\CustomTable $custom_table
+     * @param Model\CustomValue $custom_value
      * @param array $options
      * @return void
      */
@@ -30,7 +31,7 @@ trait PluginEventTrait
         
         if ($custom_value instanceof CustomValue) {
             $this->custom_value = $custom_value;
-        } elseif (isset($custom_value) && isset($custom_table)) {
+        } elseif (!is_nullorempty($custom_value) && !is_nullorempty($custom_table)) {
             $this->custom_value = $custom_table->getValueModel($custom_value);
         }
 
@@ -40,6 +41,6 @@ trait PluginEventTrait
         if (isset($options['notify'])) {
             $this->notify = $options['notify'];
         }
-        $this->isCreate = !isset($custom_value);
+        $this->isCreate = is_nullorempty($custom_value);
     }
 }

@@ -4,9 +4,9 @@
 
 namespace Exceedone\Exment\Services;
 
-use Illuminate\Http\Request;
 use Exceedone\Exment\Enums\DocumentType;
 use Exceedone\Exment\Model\Define;
+use Exceedone\Exment\Model\CustomValue;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class DocumentExcelService
@@ -21,11 +21,20 @@ class DocumentExcelService
     protected $document_type;
     protected $uniqueFileName;
 
+    /**
+     * CustomValue
+     *
+     * @var CustomValue
+     */
     protected $model;
+    
     /**
      * construct
-     * @param Request $request
-     * @param $document
+     *
+     * @param CustomValue $model
+     * @param string $tempfilename
+     * @param string $outputfilename
+     * @param string $document_type
      */
     public function __construct($model, $tempfilename, $outputfilename, $document_type)
     {
@@ -74,13 +83,7 @@ class DocumentExcelService
             $sheet->setShowGridlines($showGridlines[$i]);
         }
 
-        if ($this->document_type == DocumentType::EXCEL) {
-            $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
-        } else {
-            $writer = new Document\ExmentMpdf($spreadsheet);
-            $writer->setTempDir(getFullpath(path_join('tmp', 'document'), 'local', true));
-        }
-
+        $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
         $this->saveFile($writer);
 
         // remove tmpfile
@@ -337,6 +340,10 @@ class DocumentExcelService
         // copy admin_tmp to admin
         $stream = \Storage::disk(Define::DISKNAME_ADMIN_TMP)->readStream($file);
         \Storage::disk(Define::DISKNAME_ADMIN)->writeStream($file, $stream);
-        fclose($stream);
+        
+        try {
+            fclose($stream);
+        } catch (\Exception $ex) {
+        }
     }
 }

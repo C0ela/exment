@@ -2,8 +2,6 @@
 
 namespace Exceedone\Exment\Storage\Disk;
 
-use Exceedone\Exment\Model\File;
-
 /**
  * Disk Service.
  * prefix:::
@@ -76,7 +74,10 @@ abstract class DiskServiceBase
 
             $this->diskItem()->disk()->writeStream($to, $stream);
 
-            fclose($stream);
+            try {
+                fclose($stream);
+            } catch (\Exception $ex) {
+            }
         }
     }
 
@@ -108,4 +109,8 @@ abstract class DiskServiceBase
 
         return $this->sync();
     }
+
+    abstract protected function isNeedDownload();
+    abstract protected function isDeleteTmpAfterExecute();
+    abstract protected function sync();
 }

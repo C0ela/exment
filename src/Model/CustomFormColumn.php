@@ -9,7 +9,7 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
 {
     use Traits\UseRequestSessionTrait;
     use Traits\ClearCacheTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\TemplateTrait;
     use Traits\UniqueKeyCustomColumnTrait;
     
@@ -18,7 +18,7 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
     protected $with = ['custom_column'];
 
     public static $templateItems = [
-        'excepts' => ['custom_column', 'form_column_target', 'options.changedata_target_column_id', 'options.changedata_column_id'],
+        'excepts' => ['custom_column', 'form_column_target', 'options.changedata_target_column_id', 'options.changedata_column_id', 'options.relation_filter_target_column_id'],
         'langs' => [
             'keys' => ['form_column_target_name'],
             'values' => ['options.html', 'options.text'],
@@ -67,6 +67,18 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
                 'uniqueKeyFunction' => 'getUniqueKeyValues',
                 'uniqueKeyFunctionArgs' => ['options.changedata_target_column_id'],
             ],
+            [
+                'replaceNames' => [
+                    [
+                        'replacedName' => [
+                            'table_name' => 'options.relation_filter_target_table_name',
+                            'column_name' => 'options.relation_filter_target_column_name',
+                        ]
+                    ]
+                ],
+                'uniqueKeyFunction' => 'getUniqueKeyValues',
+                'uniqueKeyFunctionArgs' => ['options.relation_filter_target_column_id'],
+            ],
         ]
     ];
 
@@ -78,23 +90,6 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
     public function custom_column()
     {
         return $this->belongsTo(CustomColumn::class, 'form_column_target_id');
-    }
-    
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    public function forgetOption($key)
-    {
-        return $this->forgetJson('options', $key);
-    }
-    public function clearOption()
-    {
-        return $this->clearJson('options');
     }
     
     protected function getFormColumnTargetAttribute()
@@ -119,6 +114,15 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
         }
     }
 
+    protected function getCustomColumnCacheAttribute()
+    {
+        if ($this->form_column_type != FormColumnType::COLUMN) {
+            return null;
+        }
+        
+        return CustomColumn::getEloquent($this->form_column_target_id);
+    }
+    
     /**
      * get Table And Column Name
      */
@@ -166,12 +170,13 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
         // set changedata_custom_table_id
         static::replaceChangedata($json, 'options.changedata_column_table_name', 'options.changedata_column_name', 'options.changedata_column_id');
         static::replaceChangedata($json, 'options.changedata_target_table_name', 'options.changedata_target_column_name', 'options.changedata_target_column_id');
+        static::replaceChangedata($json, 'options.relation_filter_target_table_name', 'options.relation_filter_target_column_name', 'options.relation_filter_target_column_id');
     }
 
     /**
      * replace options change data
      *
-     * @param [type] $json
+     * @param array $json
      * @param string $table_key_name
      * @param string $column_key_name
      * @param string $column_key_id
@@ -192,7 +197,8 @@ class CustomFormColumn extends ModelBase implements Interfaces\TemplateImporterI
                 $changedata_target_table_name = array_get($json, $table_key_name);
                 $changedata_target_table = CustomTable::getEloquent($changedata_target_table_name);
             } else {
-                $changedata_target_table = $options['parent']->target_table;
+                $changedata_target_table = null;
+                //$changedata_target_table = $options['parent']->target_table;
             }
 
             if (isset($changedata_target_column_name) && isset($changedata_target_table)) {

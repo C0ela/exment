@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Database\Connection;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Http\Kernel;
 use Laravel\Passport\Passport;
 use Laravel\Passport\Client;
 use Webpatser\Uuid\Uuid;
@@ -59,6 +60,7 @@ class ExmentServiceProvider extends ServiceProvider
         'Exceedone\Exment\Console\UpdateCommand',
         'Exceedone\Exment\Console\PublishCommand',
         'Exceedone\Exment\Console\ScheduleCommand',
+        'Exceedone\Exment\Console\NotifyScheduleCommand',
         'Exceedone\Exment\Console\BatchCommand',
         'Exceedone\Exment\Console\BackupCommand',
         'Exceedone\Exment\Console\RestoreCommand',
@@ -69,7 +71,26 @@ class ExmentServiceProvider extends ServiceProvider
         'Exceedone\Exment\Console\CheckLangCommand',
         'Exceedone\Exment\Console\NotifyTestCommand',
         'Exceedone\Exment\Console\RefreshDataCommand',
+        'Exceedone\Exment\Console\RefreshTableDataCommand',
+        'Exceedone\Exment\Console\ImportCommand',
+        'Exceedone\Exment\Console\ExportCommand',
+        'Exceedone\Exment\Console\ExportChunkCommand',
+        'Exceedone\Exment\Console\ResetPasswordCommand',
     ];
+
+    
+    /**
+     * The application's global HTTP middleware stack.
+     *
+     * These middleware are run during every request to your application.
+     *
+     * @var array
+     */
+    protected $middleware = [
+        \Exceedone\Exment\Middleware\TrustProxies::class,
+        \Exceedone\Exment\Middleware\ExmentDebug::class,
+    ];
+
 
     /**
      * The application's route middleware.
@@ -82,6 +103,7 @@ class ExmentServiceProvider extends ServiceProvider
         'admin.password-limit'       => \Exceedone\Exment\Middleware\AuthenticatePasswordLimit::class,
         'admin.bootstrap2'  => \Exceedone\Exment\Middleware\Bootstrap::class,
         'admin.initialize'  => \Exceedone\Exment\Middleware\Initialize::class,
+        'admin.login'  => \Exceedone\Exment\Middleware\Login::class,
         'admin.morph'  => \Exceedone\Exment\Middleware\Morph::class,
         'adminapi.auth'       => \Exceedone\Exment\Middleware\AuthenticateApi::class,
         'admin.browser'  => \Exceedone\Exment\Middleware\Browser::class,
@@ -101,6 +123,7 @@ class ExmentServiceProvider extends ServiceProvider
         'laravel-page-speed.space' => \Exceedone\Exment\Middleware\CollapseWhitespace::class,
         'laravel-page-speed.jscomments' => \Exceedone\Exment\Middleware\InlineJsRemoveComments::class,
         'laravel-page-speed.comments' => \RenatoMarinho\LaravelPageSpeed\Middleware\RemoveComments::class,
+
     ];
 
     /**
@@ -133,6 +156,7 @@ class ExmentServiceProvider extends ServiceProvider
             'admin.browser',
             'admin.web-ipfilter',
             'admin.initialize',
+            'admin.login',
             'admin.morph',
             'admin.bootstrap2',
             'admin.pjax',
@@ -140,6 +164,11 @@ class ExmentServiceProvider extends ServiceProvider
             'admin.bootstrap',
             'admin.permission',
             'admin.session',
+        ],
+        // Exment not login web page, and simple config, (Almost use image)
+        'admin_anonymous_simple' => [
+            'admin.web-ipfilter',
+            'admin.initialize',
         ],
         // Exment install page
         'admin_install' => [
@@ -153,6 +182,15 @@ class ExmentServiceProvider extends ServiceProvider
             'admin.auth',
             'admin.auth-2factor',
             'admin.bootstrap2',
+        ],
+        // Exment Web page. custom verify
+        'adminweb' => [
+            \App\Http\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \Exceedone\Exment\Middleware\VerifyCsrfToken::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
         // Exment API page
         'adminapi' => [
@@ -175,7 +213,7 @@ class ExmentServiceProvider extends ServiceProvider
             'admin.log',
             'bindings',
         ],
-        // If call exment's parts. Add
+        // Extends web middleware If call exment's parts by user, please Add
         'exment_web' => [
             'admin.initialize',
             'admin.morph',
@@ -194,7 +232,6 @@ class ExmentServiceProvider extends ServiceProvider
         $this->bootApp();
         $this->bootSetting();
         $this->bootDatabase();
-        $this->bootDebug();
         $this->bootSchedule();
 
         $this->publish();
@@ -220,6 +257,12 @@ class ExmentServiceProvider extends ServiceProvider
             'exment'
         );
         
+        // register global middleware.
+        $kernel = $this->app->make(Kernel::class);
+        foreach ($this->middleware as $middleware) {
+            $kernel->pushMiddleware($middleware);
+        }
+
         // register route middleware.
         foreach ($this->routeMiddleware as $key => $middleware) {
             app('router')->aliasMiddleware($key, $middleware);
@@ -256,8 +299,8 @@ class ExmentServiceProvider extends ServiceProvider
         $this->publishes([__DIR__.'/../config' => config_path()]);
         $this->publishes([__DIR__.'/../public' => public_path('')], 'public');
         $this->publishes([__DIR__.'/../resources/views/vendor' => resource_path('views/vendor')], 'views_vendor');
-        $this->publishes([__DIR__.'/../../laravel-admin/resources/assets' => public_path('vendor/laravel-admin')], 'laravel-admin-assets-exment');
-        $this->publishes([__DIR__.'/../../laravel-admin/resources/lang' => resource_path('lang')], 'laravel-admin-lang-exment');
+        $this->publishes([base_path('vendor/exceedone/laravel-admin/resources/assets') => public_path('vendor/laravel-admin')], 'laravel-admin-assets-exment');
+        $this->publishes([base_path('vendor/exceedone/laravel-admin/resources/lang') => resource_path('lang')], 'laravel-admin-lang-exment');
         $this->publishes([__DIR__.'/../resources/lang_vendor' => resource_path('lang')], 'lang_vendor');
     }
 
@@ -272,7 +315,7 @@ class ExmentServiceProvider extends ServiceProvider
             return;
         }
 
-        $pluginPages = Plugin::getByPluginTypes(PluginType::PLUGIN_TYPE_PLUGIN_PAGE(), true);
+        $pluginPages = Plugin::getByPluginTypes(PluginType::PLUGIN_TYPE_PLUGIN_USE_VIEW(), true);
         foreach ($pluginPages as $pluginPage) {
             if (!is_null($items = $pluginPage->_getLoadView())) {
                 $this->loadViewsFrom($items[0], $items[1]);
@@ -290,6 +333,14 @@ class ExmentServiceProvider extends ServiceProvider
 
         if (!$this->app->runningInConsole()) {
             $this->commands(\Laravel\Passport\Console\KeysCommand::class);
+        }
+
+        if (config('admin.https') || config('admin.secure')) {
+            \URL::forceScheme('https');
+            $this->app['request']->server->set('HTTPS', true);
+        }
+        if (boolval(config('admin.use_app_url', false))) {
+            \URL::forceRootUrl(config('app.url'));
         }
     }
 
@@ -330,10 +381,12 @@ class ExmentServiceProvider extends ServiceProvider
 
     protected function bootSetting()
     {
+        Initialize::requireBootstrap();
+
         // Extend --------------------------------------------------
         Auth::provider('exment-auth', function ($app, array $config) {
             // Return an instance of Illuminate\Contracts\Auth\UserProvider...
-            return new Providers\CustomUserProvider($app['hash'], \Exceedone\Exment\Model\LoginUser::class);
+            return new Providers\LoginUserProvider($app['hash'], \Exceedone\Exment\Model\LoginUser::class);
         });
         
         \Validator::resolver(function ($translator, $data, $rules, $messages, $customAttributes) {
@@ -375,20 +428,9 @@ class ExmentServiceProvider extends ServiceProvider
         Connection::resolverFor('sqlsrv', function (...$parameters) {
             return new ExmentDatabase\SqlServerConnection(...$parameters);
         });
-    }
-
-    /**
-     * Boot database for Debug. if config.exment.debugmode -> true, show sql to larabel.log
-     *
-     * @return void
-     */
-    protected function bootDebug()
-    {
-        if (!boolval(config('exment.debugmode', false))) {
-            return;
-        }
-
-        Initialize::logDatabase();
+        Connection::resolverFor('pgsql', function (...$parameters) {
+            return new ExmentDatabase\PostgresConnection(...$parameters);
+        });
     }
 
     /**

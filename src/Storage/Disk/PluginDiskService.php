@@ -2,7 +2,6 @@
 
 namespace Exceedone\Exment\Storage\Disk;
 
-use Exceedone\Exment\Model\File;
 use Exceedone\Exment\Model\Define;
 use Illuminate\Support\Facades\Storage;
 
@@ -110,7 +109,10 @@ class PluginDiskService extends DiskServiceBase
             }
             $localSyncDisk->writeStream($file, $stream);
 
-            fclose($stream);
+            try {
+                fclose($stream);
+            } catch (\Exception $ex) {
+            }
         }
         
         // create updated_at file

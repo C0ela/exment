@@ -4,36 +4,38 @@ namespace Exceedone\Exment\ColumnItems\CustomColumns;
 
 use Exceedone\Exment\ColumnItems\CustomItem;
 use Exceedone\Exment\Validator\SelectRule;
+use Exceedone\Exment\Enums\DatabaseDataType;
+use Exceedone\Exment\Grid\Filter\Where as ExmWhere;
 use Encore\Admin\Form\Field;
 use Encore\Admin\Grid\Filter;
 
 class Select extends CustomItem
 {
-    use ImportValueTrait;
+    use ImportValueTrait, SelectTrait;
     
-    public function value()
+    protected function _value($v)
     {
-        return $this->getResultForSelect(false);
+        return $this->getResultForSelect($v, false);
     }
 
-    public function text()
+    protected function _text($v)
     {
-        return $this->getResultForSelect(true);
+        return $this->getResultForSelect($v, true);
     }
 
-    protected function getResultForSelect($label)
+    protected function getResultForSelect($v, $label)
     {
         $select_options = $this->custom_column->createSelectOptions();
         // if $value is array
         $multiple = true;
-        if (!is_array($this->value) && preg_match('/\[.+\]/i', $this->value)) {
-            $this->value = json_decode($this->value);
+        if (!is_array($v) && preg_match('/\[.+\]/i', $v)) {
+            $v = json_decode($v);
         }
-        if (!is_array($this->value)) {
-            $val = [$this->value];
+        if (!is_array($v)) {
+            $val = [$v];
             $multiple = false;
         } else {
-            $val = $this->value;
+            $val = $v;
         }
         // switch column_type and get return value
         $returns = $this->getReturnsValue($select_options, $val, $label);
@@ -62,9 +64,18 @@ class Select extends CustomItem
     protected function getAdminFilterClass()
     {
         if (boolval($this->custom_column->getOption('multiple_enabled'))) {
-            return Filter\Where::class;
+            return ExmWhere::class;
         }
         return Filter\Equal::class;
+    }
+
+    /**
+     * get cast Options
+     */
+    protected function getCastOptions()
+    {
+        $type = $this->isMultipleEnabled() ? DatabaseDataType::TYPE_STRING_MULTIPLE : DatabaseDataType::TYPE_STRING;
+        return [$type, false, []];
     }
 
     protected function setAdminOptions(&$field, $form_column_options)
@@ -84,6 +95,11 @@ class Select extends CustomItem
         $filter->select($options);
     }
     
+    /**
+     * replace value for import
+     *
+     * @return array
+     */
     protected function getImportValueOption()
     {
         return $this->custom_column->createSelectOptions();
@@ -91,8 +107,26 @@ class Select extends CustomItem
     
     public function getAdminFilterWhereQuery($query, $input)
     {
-        $index = \DB::getQueryGrammar()->wrap($this->index());
-        // index is wraped
-        $query->whereRaw("FIND_IN_SET(?, REPLACE(REPLACE(REPLACE(REPLACE($index, '[', ''), ' ', ''), ']', ''), '\\\"', ''))", $input);
+        $this->getSelectFilterQuery($query, $input);
+    }
+    
+    /**
+     * sortable for grid
+     */
+    public function sortable()
+    {
+        if ($this->isMultipleEnabled()) {
+            return false;
+        }
+        return parent::sortable();
+    }
+
+    public function isMultipleEnabled()
+    {
+        return $this->isMultipleEnabledTrait();
+    }
+    protected function getFilterFieldClass()
+    {
+        return Field\Select::class;
     }
 }

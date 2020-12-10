@@ -6,8 +6,88 @@ use Illuminate\Database\Query\Grammars\MySqlGrammar as BaseGrammar;
 use Exceedone\Exment\Enums\DatabaseDataType;
 use Exceedone\Exment\Enums\GroupCondition;
 
-class MySqlGrammar extends BaseGrammar
+class MySqlGrammar extends BaseGrammar implements GrammarInterface
 {
+    use GrammarTrait;
+    
+    public function compileUpdateRemovingJsonKey($query, string $key) : string
+    {
+        $table = $this->wrapTable($query->from);
+
+        // Creating json value
+        
+        $path = explode('->', $key);
+
+        $field = $this->wrapValue(array_shift($path));
+
+        $accessor = "'$.\"".implode('"."', $path)."\"'";
+
+        $column = "{$field} = json_remove({$field}, {$accessor})";
+
+        // If the query has any "join" clauses, we will setup the joins on the builder
+        // and compile them so we can attach them to this update, as update queries
+        // can get join statements to attach to other tables when they're needed.
+        $joins = '';
+
+        if (isset($query->joins)) {
+            $joins = ' '.$this->compileJoins($query, $query->joins);
+        }
+
+        // Of course, update queries may also be constrained by where clauses so we'll
+        // need to compile the where clauses and attach it to the query so only the
+        // intended records are updated by the SQL statements we generate to run.
+        $wheres = $this->compileWheres($query);
+
+        return trim("update {$table}{$joins} set $column $wheres");
+    }
+
+    /**
+     * Whether support wherein multiple column.
+     *
+     * @return bool
+     */
+    public function isSupportWhereInMultiple() : bool
+    {
+        return true;
+    }
+    
+    
+    /**
+     * wherein string.
+     * Ex. column is 1,12,23,31 , and want to match 1, getting.
+     *
+     * @param \Illuminate\Database\Query\Builder $builder
+     * @param string $tableName database table name
+     * @param string $column target table name
+     * @param array $values
+     * @return \Illuminate\Database\Query\Builder
+     */
+    public function whereInArrayString($builder, string $tableName, string $column, $values, bool $isOr = false, bool $isNot = false)
+    {
+        $index = $this->wrap($column);
+
+        if ($isNot) {
+            $queryStr = "NOT FIND_IN_SET(?, IFNULL(REPLACE(REPLACE(REPLACE(REPLACE($index, '[', ''), ' ', ''), ']', ''), '\\\"', ''), ''))";
+        } else {
+            $queryStr = "FIND_IN_SET(?, REPLACE(REPLACE(REPLACE(REPLACE($index, '[', ''), ' ', ''), ']', ''), '\\\"', ''))";
+        }
+        
+        if (is_list($values)) {
+            $func = $isOr ? 'orWhere' : 'where';
+            $builder->{$func}(function ($query) use ($queryStr, $values) {
+                foreach ($values as $i) {
+                    $query->orWhereRaw($queryStr, $i);
+                }
+            });
+        } else {
+            $func = $isOr ? 'orWhereRaw' : 'whereRaw';
+            $builder->{$func}($queryStr, $values);
+        }
+
+        return $builder;
+    }
+    
+
     /**
      * Get cast column string
      *
@@ -20,6 +100,31 @@ class MySqlGrammar extends BaseGrammar
         $column = $this->wrap($column);
 
         return "CAST($column AS $cast)";
+    }
+
+    /**
+     * Get column type string. Almost use virtual column.
+     *
+     * @return string
+     */
+    public function getColumnTypeString($type)
+    {
+        switch ($type) {
+            case DatabaseDataType::TYPE_INTEGER:
+                return 'bigint';
+            case DatabaseDataType::TYPE_DECIMAL:
+                return 'decimal';
+            case DatabaseDataType::TYPE_STRING:
+            case DatabaseDataType::TYPE_STRING_MULTIPLE:
+                return 'nvarchar(768)';
+            case DatabaseDataType::TYPE_DATE:
+                return 'date';
+            case DatabaseDataType::TYPE_DATETIME:
+                return 'datetime';
+            case DatabaseDataType::TYPE_TIME:
+                return 'time';
+        }
+        return 'nvarchar(768)';
     }
 
     /**
@@ -38,6 +143,7 @@ class MySqlGrammar extends BaseGrammar
                 $cast = 'decimal';
                 break;
             case DatabaseDataType::TYPE_STRING:
+            case DatabaseDataType::TYPE_STRING_MULTIPLE:
                 $cast = 'varchar';
                 break;
             case DatabaseDataType::TYPE_DATE:
@@ -45,6 +151,9 @@ class MySqlGrammar extends BaseGrammar
                 break;
             case DatabaseDataType::TYPE_DATETIME:
                 $cast = 'datetime';
+                break;
+            case DatabaseDataType::TYPE_TIME:
+                $cast = 'time';
                 break;
         }
 
@@ -61,6 +170,7 @@ class MySqlGrammar extends BaseGrammar
                 break;
                 
             case DatabaseDataType::TYPE_STRING:
+            case DatabaseDataType::TYPE_STRING_MULTIPLE:
                 $cast .= "($length)";
                 break;
         }
@@ -110,7 +220,7 @@ class MySqlGrammar extends BaseGrammar
      * convert carbon date to date format
      *
      * @param GroupCondition $groupCondition Y, YM, YMD, ...
-     * @param Carbon $carbon
+     * @param \Carbon\Carbon $carbon
      *
      * @return string
      */
@@ -137,7 +247,7 @@ class MySqlGrammar extends BaseGrammar
     /**
      * Get case when query
      *
-     * @return void
+     * @return string
      */
     protected function getWeekdayCaseWhenQuery($str)
     {

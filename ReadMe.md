@@ -34,8 +34,8 @@ And more and more and more functions....
 
 ## Operating environment
 ### Server
-- PHP 7.1.3 or upperm and less than PHP 7.4
-- MySQL 5.7.8 or upper, or MariaDB 10.2.7 or upper
+- PHP 7.1.3 or upper
+- MySQL 5.7.8 or upper and less than 8.0.0, or MariaDB 10.2.7 or upper
 - Laravel5.6
 
 ### Support Browser
@@ -133,3 +133,22 @@ php artisan serve
 
 # issues
 Please write issues using English or Japanese.  / issuesには英語または日本語で記載してください。
+
+
+# Other repositories
+
+- **[Manual](https://github.com/exceedone/exment-manual)**  
+For exment manual page.
+
+- **[Update Batch](https://github.com/exment-git/batch-update)**  
+Update batch.
+
+- **[Auto Composer](https://github.com/exment-git/auto-composer)**  
+Call auto composer.
+
+- **[Docker](https://github.com/exment-git/docker-exment)**  
+Exment dockers.
+
+- **[Plugin Sample](https://github.com/exment-git/plugin-sample)**  
+Exment plugin's samples.
+

@@ -3,7 +3,7 @@
 namespace Exceedone\Exment\Enums;
 
 use Exceedone\Exment\Model\CustomValue;
-use Exceedone\Exment\ColumnItems\CustomItem;
+use Exceedone\Exment\ColumnItems\ItemInterface;
 
 /**
  * ValueType
@@ -18,13 +18,15 @@ class ValueType extends EnumBase
     /**
      * Get custom value val
      *
-     * @return void
+     * @return mixed
      */
-    public function getCustomValue(?CustomItem $item, ?CustomValue $custom_value)
+    public function getCustomValue(?ItemInterface $item, ?CustomValue $custom_value)
     {
         if (!isset($item) || !isset($custom_value)) {
             return null;
         }
+
+        $item->setCustomValue($custom_value);
 
         switch ($this) {
             case static::VALUE:
@@ -44,9 +46,9 @@ class ValueType extends EnumBase
     }
 
     /**
-     * Filter ApiValueType. Now Only text.
+     * Filter ApiValueType.
      *
-     * @return void
+     * @return boolean
      */
     public static function filterApiValueType($valueType)
     {
@@ -54,6 +56,22 @@ class ValueType extends EnumBase
         switch ($enum) {
             case static::TEXT:
             case static::PURE_VALUE:
+                return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Wheether re-get and set custom value.
+     *
+     * @return boolean
+     */
+    public static function isRegetApiCustomValue($valueType)
+    {
+        $enum = static::getEnum($valueType);
+        switch ($enum) {
+            case static::TEXT:
                 return true;
         }
 

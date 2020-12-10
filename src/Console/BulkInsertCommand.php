@@ -9,7 +9,7 @@ use \File;
 
 class BulkInsertCommand extends Command
 {
-    use CommandTrait;
+    use CommandTrait, ImportTrait;
 
     /**
      * The name and signature of the console command.
@@ -68,6 +68,7 @@ class BulkInsertCommand extends Command
 
             $this->line("該当ファイル数：".count($files));
 
+            $path = null;
             foreach ($files as $index => $file) {
                 $this->line(($index + 1) . "件目 実施開始 ファイル:{$file->getFileName()}");
 
@@ -86,25 +87,6 @@ class BulkInsertCommand extends Command
         }
 
         return 0;
-    }
-
-    /**
-     * get file names in target folder (filter extension)
-     *
-     */
-    private function getFiles($ext = 'tsv', $include_sub = false)
-    {
-        // get files in target folder
-        if ($include_sub) {
-            $files = File::allFiles($this->directory);
-        } else {
-            $files = File::files($this->directory);
-        }
-        // filter files by extension
-        $files = array_filter($files, function ($file) use ($ext) {
-            return preg_match('/.+\.'.$ext.'$/i', $file);
-        });
-        return $files;
     }
 
     /**
@@ -144,6 +126,7 @@ class BulkInsertCommand extends Command
         // get physical table name
         $tablename = getDBTableName($targets[0]);
 
+        $tsvname = null;
         switch (count($targets)) {
             case 2:
                 $tsvname = $tablename . '.tsv';
@@ -244,7 +227,7 @@ class BulkInsertCommand extends Command
     /**
      * insert table data from tsv files.
      *
-     * @param string temporary file path stored work tsv files
+     * @param string $file temporary file path stored work tsv files
      */
     private function importTsv($file)
     {

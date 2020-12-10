@@ -4,24 +4,38 @@ namespace Exceedone\Exment\ColumnItems;
 
 use Exceedone\Exment\Enums\SummaryCondition;
 use Exceedone\Exment\Enums\GroupCondition;
+use Exceedone\Exment\Model\CustomColumn;
 
+/**
+ *
+ * @property CustomColumn $custom_column
+ */
 trait SummaryItemTrait
 {
-
     //for summary  --------------------------------------------------
+
+    protected function getSummaryConditionName()
+    {
+        $summary_option = array_get($this->options, 'summary_condition');
+        $summary_condition = is_null($summary_option) ? null : SummaryCondition::getEnum($summary_option)->lowerKey();
+        return $summary_condition;
+    }
 
     /**
      * get sqlname for summary
      */
     protected function getSummarySqlName()
     {
-        extract($this->getSummaryParams());
+        $options = $this->getSummaryParams();
+        $value_column = $options['value_column'];
+        $group_condition = $options['group_condition'];
 
-        $summary_option = array_get($this->options, 'summary_condition');
-        $summary_condition = is_null($summary_option) ? null : SummaryCondition::getEnum($summary_option)->lowerKey();
+        $summary_condition = $this->getSummaryConditionName();
         
         if (isset($summary_condition)) {
-            $raw = "$summary_condition($value_column) AS ".$this->sqlAsName();
+            // get cast
+            $castColumn = $this->getCastColumn($value_column);
+            $raw = "$summary_condition($castColumn) AS ".$this->sqlAsName();
         } elseif (isset($group_condition)) {
             $raw = \DB::getQueryGrammar()->getDateFormatString($group_condition, $value_column, false) . " AS ".$this->sqlAsName();
         } else {
@@ -36,7 +50,10 @@ trait SummaryItemTrait
      */
     protected function getGroupBySqlName()
     {
-        extract($this->getSummaryParams());
+        $options = $this->getSummaryParams();
+        $value_column = $options['value_column'];
+        $group_condition = $options['group_condition'];
+        $is_child = $options['is_child'];
         
         // get column_name. toggle whether is child or not
         if ($is_child) {
@@ -56,7 +73,7 @@ trait SummaryItemTrait
 
     protected function getSummaryParams()
     {
-        $db_table_name = getDBTableName($this->custom_column->custom_table);
+        $db_table_name = getDBTableName($this->custom_column->custom_table_cache);
         $column_name = $this->custom_column->column_name;
 
         $group_condition = array_get($this->options, 'group_condition');
@@ -87,11 +104,21 @@ trait SummaryItemTrait
     {
         $db_table_name = getDBTableName($this->custom_column->custom_table);
         $column_name = $this->custom_column->column_name;
-
-        $summary_condition = SummaryCondition::getSummaryCondition(array_get($this->options, 'summary_condition'));
+        
+        $summary_condition = $this->getSummaryConditionName();
         $alter_name = $this->sqlAsName();
         $raw = "$summary_condition($alter_name) AS $alter_name";
 
         return \DB::raw($raw);
+    }
+    
+    /**
+     * Get API column name
+     *
+     * @return string
+     */
+    protected function _apiName()
+    {
+        return array_get($this->options, 'view_column_suuid');
     }
 }

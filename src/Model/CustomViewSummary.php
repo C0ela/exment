@@ -7,8 +7,9 @@ use Exceedone\Exment\Enums\ConditionType;
 class CustomViewSummary extends ModelBase
 {
     use Traits\CustomViewColumnTrait;
+    use Traits\AutoSUuidTrait;
     use Traits\CustomViewColumnOptionTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\TemplateTrait;
     use Traits\UseRequestSessionTrait;
 

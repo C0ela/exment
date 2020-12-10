@@ -21,6 +21,7 @@ class ReplaceFormatService
             [
                 'matchBeforeCallback' => null,
                 'afterCallBack' => null,
+                'escapeValue' => false, // escape html value
             ],
             $options
         );
@@ -33,6 +34,8 @@ class ReplaceFormatService
                 for ($i = 0; $i < count($matches[1]); $i++) {
                     $str = null;
                     $matchString = null;
+                    $matchOptions = [];
+                    
                     try {
                         $match = $matches[1][$i];
                         $matchString = $matches[0][$i];
@@ -80,12 +83,8 @@ class ReplaceFormatService
                         $str = '';
                     }
 
-                    if (array_key_value_exists('link', $matchOptions)) {
+                    if (array_key_value_exists('link', $matchOptions) && isset($item)) {
                         $str = $item->getLink($str);
-                    }
-
-                    if ($options['escapeValue'] ?? false) {
-                        $str = esc_html($str);
                     }
 
                     // replace
@@ -93,6 +92,10 @@ class ReplaceFormatService
                 }
             }
         } catch (\Exception $e) {
+        }
+
+        if ($options['escapeValue'] ?? false) {
+            $format = esc_html($format);
         }
 
         if (array_key_value_exists('afterCallback', $options)) {

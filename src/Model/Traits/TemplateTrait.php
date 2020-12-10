@@ -5,6 +5,12 @@ namespace Exceedone\Exment\Model\Traits;
 use Exceedone\Exment\Model;
 use Exceedone\Exment\Enums\TemplateImportResult;
 
+/**
+ * Template logics
+ *
+ * @method static string|null|void importReplaceJson(&$json, $options = [])
+ * @property array templateItems
+ */
 trait TemplateTrait
 {
     protected static $defaultExcepts = ['id', 'created_at', 'updated_at', 'created_user_id', 'updated_user_id', 'disabled_delete'];
@@ -204,7 +210,7 @@ trait TemplateTrait
     /**
      * set template Export Items.
      *
-     * @return array template items
+     * @return \Illuminate\Database\Eloquent\Model template items
      */
     public static function importTemplate($array, $is_update, $options = [])
     {

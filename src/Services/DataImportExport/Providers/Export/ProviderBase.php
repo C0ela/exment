@@ -2,6 +2,8 @@
 
 namespace Exceedone\Exment\Services\DataImportExport\Providers\Export;
 
+use Illuminate\Database\Eloquent\Collection;
+
 abstract class ProviderBase
 {
     
@@ -11,9 +13,14 @@ abstract class ProviderBase
     protected $template = false;
 
     /**
-     * Create a new exporter instance.
+     * data's count
      *
-     * @param $grid
+     * @var integer
+     */
+    protected $count = 0;
+
+    /**
+     * Create a new exporter instance.
      */
     public function __construct()
     {
@@ -39,4 +46,11 @@ abstract class ProviderBase
     {
         return true;
     }
+    
+    public function getCount()
+    {
+        return $this->count;
+    }
+
+    abstract public function getRecords() : Collection;
 }

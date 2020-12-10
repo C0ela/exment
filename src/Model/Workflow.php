@@ -7,7 +7,7 @@ use Exceedone\Exment\Enums\WorkflowType;
 class Workflow extends ModelBase
 {
     use Traits\AutoSUuidTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\UseRequestSessionTrait;
     use Traits\ClearCacheTrait;
 
@@ -37,7 +37,8 @@ class Workflow extends ModelBase
         
     public function notifies()
     {
-        return $this->hasMany(Notify::class, 'workflow_id');
+        return $this->hasMany(Notify::class, 'workflow_id')
+            ->where('active_flg', 1);
     }
 
     protected static function boot()
@@ -86,14 +87,6 @@ class Workflow extends ModelBase
         return $this;
     }
 
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
 
     /**
      * get workflow statuses using cache
@@ -123,7 +116,7 @@ class Workflow extends ModelBase
     /**
      * Get status string
      *
-     * @return Collection
+     * @return string
      */
     public function getStatusesString()
     {
@@ -133,7 +126,7 @@ class Workflow extends ModelBase
     /**
      * Get status options. contains start and end.
      *
-     * @return Collection
+     * @return \Illuminate\Support\Collection
      */
     public function getStatusOptions($onlyStart = false)
     {
@@ -150,8 +143,8 @@ class Workflow extends ModelBase
     /**
      * Get workflow filtering active using custom table
      *
-     * @param [type] $custom_table
-     * @return void
+     * @param CustomTable $custom_table
+     * @return Workflow|null
      */
     public static function getWorkflowByTable($custom_table)
     {
@@ -182,6 +175,11 @@ class Workflow extends ModelBase
             if (isset($record->active_end_date) && $today->gt(new \Carbon\Carbon($record->active_end_date))) {
                 return false;
             }
+
+            $workflow = Workflow::getEloquent($record->workflow_id);
+            if (!boolval($workflow->setting_completed_flg)) {
+                return false;
+            }
             
             return true;
         }, false)->first();
@@ -197,8 +195,7 @@ class Workflow extends ModelBase
      * Get custom table. Only workflow type is table
      * If workflow is common, return null
      *
-     * @param [type] $custom_table
-     * @return void
+     * @return CustomTable|null
      */
     public function getDesignatedTable()
     {
@@ -236,6 +233,21 @@ class Workflow extends ModelBase
         // check actions
         if (count($this->workflow_actions) == 0) {
             return false;
+        }
+
+        // check action use status is exists
+        $status_list = $this->workflow_statuses->pluck('id');
+        $status_list->push(Define::WORKFLOW_START_KEYNAME);
+
+        foreach ($this->workflow_actions as $workflow_action) {
+            if (!$status_list->contains($workflow_action->status_from)) {
+                return false;
+            }
+            foreach ($workflow_action->workflow_condition_headers as $workflow_condition_header) {
+                if (!$status_list->contains($workflow_condition_header->status_to)) {
+                    return false;
+                }
+            }
         }
 
         return true;

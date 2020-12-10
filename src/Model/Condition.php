@@ -36,7 +36,7 @@ class Condition extends ModelBase
     /**
      * Get target condition.
      *
-     * @return void
+     * @return string|null
      */
     public function getConditionTarget()
     {
@@ -114,6 +114,10 @@ class Condition extends ModelBase
     public function isMatchCondition($custom_value)
     {
         $item = ConditionItemBase::getItem($custom_value->custom_table, $this->condition_target);
+        if (is_null($item)) {
+            return false;
+        }
+        
         return $item->isMatchCondition($this, $custom_value);
     }
     
@@ -121,8 +125,8 @@ class Condition extends ModelBase
      * get work conditions.
      * *Convert to "_X" format to array. ex.enabled_0
      *
-     * @param [type] $work_conditions
-     * @return void
+     * @param array $work_conditions
+     * @return array
      */
     public static function getWorkConditions($work_conditions)
     {

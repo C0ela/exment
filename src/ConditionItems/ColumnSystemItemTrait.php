@@ -3,7 +3,6 @@
 namespace Exceedone\Exment\ConditionItems;
 
 use Exceedone\Exment\Model\CustomViewFilter;
-use Exceedone\Exment\Enums\FilterKind;
 use Exceedone\Exment\Enums\FilterOption;
 
 trait ColumnSystemItemTrait
@@ -21,14 +20,15 @@ trait ColumnSystemItemTrait
             return [];
         }
 
-        return array_get($this->filterKind == FilterKind::VIEW ? FilterOption::FILTER_OPTIONS() : FilterOption::FILTER_CONDITION_OPTIONS(), $column_type);
+        return array_get(FilterOption::FILTER_OPTIONS(), $column_type);
     }
 
     /**
      * Get change field
      *
-     * @param [type] $key
-     * @return void
+     * @param string $key
+     * @param bool $show_condition_key
+     * @return \Encore\Admin\Form\Field
      */
     public function getChangeField($key, $show_condition_key = true)
     {
@@ -38,7 +38,7 @@ trait ColumnSystemItemTrait
 
         $value_type = null;
 
-        if (isset($key) && boolval($show_condition_key)) {
+        if (!is_nullorempty($key) && boolval($show_condition_key)) {
             $value_type = FilterOption::VALUE_TYPE($key);
 
             if ($value_type == 'none') {

@@ -5,7 +5,7 @@ namespace Exceedone\Exment\Controllers;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
-use Encore\Admin\Auth\Permission as Checker;
+use Exceedone\Exment\Auth\Permission as Checker;
 use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Model\CustomTable;
 use Exceedone\Exment\Model\Plugin;
@@ -16,14 +16,12 @@ use Exceedone\Exment\Enums\PluginEventTrigger;
 use Exceedone\Exment\Enums\PluginEventType;
 use Exceedone\Exment\Enums\PluginButtonType;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-use File;
 
 class PluginController extends AdminControllerBase
 {
     use HasResourceActions;
 
-    public function __construct(Request $request)
+    public function __construct()
     {
         $this->setPageInfo(exmtrans("plugin.header"), exmtrans("plugin.header"), exmtrans("plugin.description"), 'fa-plug');
     }
@@ -51,6 +49,26 @@ class PluginController extends AdminControllerBase
     }
 
     /**
+     * execute batch
+     *
+     * @param Request $request
+     * @param string|int|null $id
+     * @return void
+     */
+    public function executeBatch(Request $request, $id)
+    {
+        if (!\Exment::user()->hasPermission(Permission::PLUGIN_ACCESS)) {
+            Checker::error();
+            return false;
+        }
+
+        \Artisan::call('exment:batch', ['id' => $id]);
+        
+        admin_toastr(exmtrans('common.message.success_execute'));
+        return back();
+    }
+
+    /**
      * Make a grid builder.
      *
      * @return Grid
@@ -62,6 +80,11 @@ class PluginController extends AdminControllerBase
             $filter->disableIdFilter();
             $filter->like('uuid', exmtrans("plugin.uuid"));
             $filter->like('plugin_name', exmtrans("plugin.plugin_name"));
+            $filter->like('plugin_view_name', exmtrans("plugin.plugin_view_name"));
+
+            $filter->like('author', exmtrans("plugin.author"));
+            $filter->like('version', exmtrans("plugin.version"));
+            $filter->like('active_flg', exmtrans("plugin.active_flg"))->radio(\Exment::getYesNoAllOption());
         });
 
         $grid->column('plugin_name', exmtrans("plugin.plugin_name"))->sortable();
@@ -145,6 +168,12 @@ class PluginController extends AdminControllerBase
     //Check request when edit record to delete null values in event_triggers
     protected function update(Request $request, $id)
     {
+        $plugin = Plugin::getEloquent($id);
+        if (!$plugin->hasPermission(Permission::PLUGIN_SETTING)) {
+            Checker::error();
+            return false;
+        }
+        
         if (isset($request->get('options')['event_triggers']) === true) {
             $event_triggers = $request->get('options')['event_triggers'];
             $options = $request->get('options');
@@ -163,8 +192,8 @@ class PluginController extends AdminControllerBase
     protected function form($id = null, $isDelete = false)
     {
         $plugin = Plugin::getEloquent($id);
-        if (!$plugin->hasPermission(Permission::PLUGIN_SETTING)) {
-            Checker::error();
+        if (!$plugin || !$plugin->hasPermission(Permission::PLUGIN_SETTING)) {
+            Checker::notFoundOrDeny();
             return false;
         }
 
@@ -260,16 +289,32 @@ class PluginController extends AdminControllerBase
             $this->setCustomOptionForm($plugin, $form);
         }
 
-        $form->tools(function (Form\Tools $tools) use ($plugin) {
+        $form->tools(function (Form\Tools $tools) use ($plugin, $id) {
             if ($plugin->disabled_delete) {
                 $tools->disableDelete();
             }
+
+            $tools->append(view('exment::tools.button', [
+                'href' => admin_url("plugin/edit_code/$id"),
+                'label' => exmtrans('plugin.edit_plugin'),
+                'icon' => 'fa-edit',
+                'btn_class' => 'btn-warning',
+            ]));
 
             if ($plugin->matchPluginType(PluginType::PAGE)) {
                 $tools->append(view('exment::tools.button', [
                     'href' => admin_url($plugin->getRouteUri()),
                     'label' => exmtrans('plugin.show_plugin_page'),
                     'icon' => 'fa-desktop',
+                    'btn_class' => 'btn-purple',
+                ]));
+            }
+            
+            if ($plugin->matchPluginType(PluginType::BATCH)) {
+                $tools->append(view('exment::tools.button', [
+                    'href' => admin_urls('plugin', $plugin->id, 'executeBatch'),
+                    'label' => exmtrans('plugin.execute_plugin_batch'),
+                    'icon' => 'fa-exclamation-circle',
                     'btn_class' => 'btn-purple',
                 ]));
             }
@@ -282,7 +327,7 @@ class PluginController extends AdminControllerBase
     /**
      * Get plugin custom option
      *
-     * @param [type] $plugin
+     * @param Plugin|null $plugin
      * @return void
      */
     protected function setCustomOptionForm($plugin, &$form)

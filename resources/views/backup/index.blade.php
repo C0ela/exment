@@ -60,11 +60,14 @@
                         {{ $file['created'] }}
                     </td>
                     <td class="column-__actions__">
-                        <a href="javascript:void(0);" data-id="{{$file['file_key']}}" data-toggle="tooltip" title="{{exmtrans('backup.restore')}}" class="grid-row-restore">
+                        <a href="javascript:void(0);" data-widgetmodal_url="{{admin_urls('backup', 'importModal', $file['file_key'])}}" data-toggle="tooltip" title="{{exmtrans('backup.restore')}}">
                             <i class="fa fa-undo"></i>
                         </a>
                         <a href="javascript:void(0);" data-id="{{$file['file_key']}}" data-toggle="tooltip" title="{{trans('admin.delete')}}" class="grid-row-delete">
                             <i class="fa fa-trash"></i>
+                        </a>
+                        <a href="javascript:void(0);" data-id="{{$file['file_key']}}" data-toggle="tooltip" title="{{exmtrans('backup.message.edit_filename_confirm')}}" class="grid-row-editname">
+                            <i class="fa fa-edit"></i>
                         </a>
                         <a href="{{admin_url('backup/download/'.$file['file_key'])}}" data-toggle="tooltip" title="{{exmtrans('common.download')}}" target="_blank">
                             <i class="fa fa-download"></i>
@@ -90,25 +93,21 @@
             },
         });
     }
-    function restore(id) {
-        Exment.CommonEvent.ShowSwal('{{admin_url("backup/restore")}}', {
-            title: "{{exmtrans('backup.message.restore_confirm')}}",
-            text: "{{$restore_text}}",
-            confirm:"{{trans('admin.confirm')}}",
+
+    function editname(id) {
+        Exment.CommonEvent.ShowSwal('{{admin_url("backup/editname")}}', {
+            title: "{{exmtrans('backup.message.edit_filename_confirm')}}",
+            text: "{{$editname_text}}",
+            confirm:"{{trans('admin.submit')}}",
             input: 'text',
+            inputKey: 'filename',
             cancel:"{{trans('admin.cancel')}}",
             data: {
                 file: id
             },
-            preConfirmValidate: function(input){
-                if (input != "{{$restore_keyword}}") {
-                    return "{{exmtrans('error.mistake_keyword')}}";
-                }
-
-                return true;
-            },
         });
     }
+    
     $(document).ready(function () {
         $('.grid-refresh').on('click', function() {
             $.pjax.reload('#pjax-container');
@@ -137,9 +136,9 @@
             var id = $(this).data('id');
             deletefile(id);
         });
-        $('.grid-row-restore').unbind('click').click(function() {
+        $('.grid-row-editname').unbind('click').click(function() {
             var id = $(this).data('id');
-            restore(id);
+            editname(id);
         });
         $('.btn-backup').unbind('click').click(function() {
             Exment.CommonEvent.ShowSwal('{{admin_url("backup/save")}}', {

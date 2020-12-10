@@ -13,9 +13,15 @@ use Exceedone\Exment\Enums\SystemColumn;
 use Exceedone\Exment\Enums\ViewKindType;
 use Exceedone\Exment\ColumnItems;
 
+/**
+ * @method getOption($key, $default = null))
+ * @method setOption($key, $val = null, $forgetIfNull = false)
+ */
 trait CustomViewColumnTrait
 {
     use ColumnOptionQueryTrait;
+
+    private $_custom_item;
 
     public function custom_view()
     {
@@ -33,6 +39,10 @@ trait CustomViewColumnTrait
     {
         return $this->belongsTo(CustomTable::class, 'view_column_table_id');
     }
+    public function getCustomTableCacheAttribute()
+    {
+        return CustomTable::getEloquent($this->view_column_table_id);
+    }
 
     /**
      * get ViewColumnTarget.
@@ -45,22 +55,34 @@ trait CustomViewColumnTrait
 
     public function getColumnItemAttribute()
     {
+        if (isset($this->_custom_item)) {
+            return $this->_custom_item;
+        }
+
         // if tagret is number, column type is column.
         if ($this->view_column_type == ConditionType::COLUMN) {
-            return ColumnItems\CustomItem::getItem($this->custom_column, null, $this->view_column_target);
+            $this->_custom_item = ColumnItems\CustomItem::getItem($this->custom_column, null, $this->view_column_target);
         }
         // workflow
         elseif ($this->view_column_type == ConditionType::WORKFLOW) {
-            return ColumnItems\WorkflowItem::getItem(CustomTable::getEloquent($this->view_column_table_id), $this->view_column_target);
+            $this->_custom_item = ColumnItems\WorkflowItem::getItem(CustomTable::getEloquent($this->view_column_table_id), $this->view_column_target);
         }
         // parent_id
         elseif ($this->view_column_type == ConditionType::PARENT_ID) {
-            return ColumnItems\ParentItem::getItem(CustomTable::getEloquent($this->view_column_table_id));
+            $this->_custom_item = ColumnItems\ParentItem::getItem(CustomTable::getEloquent($this->view_column_table_id));
         }
         // system column
         else {
-            return ColumnItems\SystemItem::getItem(CustomTable::getEloquent($this->view_column_table_id), $this->view_column_target);
+            $this->_custom_item = ColumnItems\SystemItem::getItem(CustomTable::getEloquent($this->view_column_table_id), $this->view_column_target);
         }
+
+        if (!is_nullorempty($this->suuid)) {
+            $this->_custom_item->options([
+                'view_column_suuid' => $this->suuid,
+            ]);
+        }
+
+        return $this->_custom_item;
     }
     
     /**
@@ -169,6 +191,20 @@ trait CustomViewColumnTrait
                 break;
         }
         return [$target_column_id, $target_table_id];
+    }
+
+    protected function getViewPivotIdTrait($key)
+    {
+        return $this->getOption($key);
+    }
+    protected function setViewPivotIdTrait($key, $view_pivot_id)
+    {
+        if (!isset($view_pivot_id)) {
+            $this->setOption($key, null);
+            return $this;
+        }
+        $this->setOption($key, $view_pivot_id);
+        return $this;
     }
 
     /**

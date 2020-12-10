@@ -16,7 +16,48 @@ class Csv extends FormatBase
         return $this->filebasename.date('YmdHis'). ($this->isOutputAsZip() ? ".zip" : ".csv");
     }
     
-    public function getDataTable($request)
+    public function getDataTable($request, array $options = [])
+    {
+        $options = $this->getDataOptions($options);
+        return $this->_getData($request, function ($files) use ($options) {
+            // if over row size, return number
+            if (boolval($options['checkCount'])) {
+                if (($count = $this->getRowCount($files)) > (config('exment.import_max_row_count', 1000) + 2)) {
+                    return $count;
+                }
+            }
+
+            $datalist = [];
+            foreach ($files as $csvfile) {
+                $basename = $csvfile->getBasename('.csv');
+                $datalist[$basename] = $this->getCsvArray($csvfile->getRealPath());
+            }
+
+            return $datalist;
+        }, function ($path) use ($options) {
+            // if over row size, return number
+            if (boolval($options['checkCount'])) {
+                if (($count = $this->getRowCount($path)) > (config('exment.import_max_row_count', 1000) + 2)) {
+                    return $count;
+                }
+            }
+
+            $basename = $this->filebasename;
+            $datalist[$basename] = $this->getCsvArray($path);
+            return $datalist;
+        });
+    }
+    
+    public function getDataCount($request)
+    {
+        return $this->_getData($request, function ($files) {
+            return $this->getRowCount($files);
+        }, function ($path) {
+            return $this->getRowCount($path);
+        });
+    }
+
+    protected function _getData($request, $callbackZip, $callbackDefault)
     {
         // get file
         if ($request instanceof Request) {
@@ -24,7 +65,7 @@ class Csv extends FormatBase
             $path = $file->getRealPath();
             $extension = $file->extension();
             $originalName = $file->getClientOriginalName();
-        } elseif ($request instanceof SplFileInfo) {
+        } elseif ($request instanceof \SplFileInfo) {
             $path = $request->getPathName();
             $extension = pathinfo($path)['extension'];
             $originalName = pathinfo($path, PATHINFO_BASENAME);
@@ -35,13 +76,13 @@ class Csv extends FormatBase
         }
 
         // if zip, extract
-        if ($extension == 'zip') {
+        if ($extension == 'zip' && isset($file)) {
             $tmpdir = getTmpFolderPath('data', false);
             $tmpfolderpath = getFullPath(path_join($tmpdir, short_uuid()), Define::DISKNAME_ADMIN_TMP, true);
             
             $filename = $file->store($tmpdir, Define::DISKNAME_ADMIN_TMP);
             $fullpath = getFullpath($filename, Define::DISKNAME_ADMIN_TMP);
-    
+
             // open zip file
             try {
                 $zip = new \ZipArchive;
@@ -57,20 +98,10 @@ class Csv extends FormatBase
                     return pathinfo($value)['extension'] == 'csv';
                 });
 
-                // if over row size, return number
-                if (($count = $this->getRowCount($files)) > (config('exment.import_max_row_count', 1000) + 2)) {
-                    return $count;
-                }
-
-                foreach ($files as $csvfile) {
-                    $basename = $csvfile->getBasename('.csv');
-                    $datalist[$basename] = $this->getCsvArray($csvfile->getRealPath());
-                }
-
-                return $datalist;
+                return $callbackZip($files);
             } finally {
                 // delete tmp folder
-                if (isset($zip)) {
+                if (!is_nullorempty($zip)) {
                     $zip->close();
                 }
                 // delete zip
@@ -82,26 +113,42 @@ class Csv extends FormatBase
                 }
             }
         } else {
-            // if over row size, return number
-            if (($count = $this->getRowCount($path)) > (config('exment.import_max_row_count', 1000) + 2)) {
-                return $count;
-            }
-
-            $basename = $this->filebasename;
-            $datalist[$basename] = $this->getCsvArray($path);
+            return $callbackDefault($path);
         }
-
-        return $datalist;
     }
 
     /**
      * whether this out is as zip.
      * This table is parent and contains relation 1:n or n:n.
+     *
+     * @return boolean
      */
     protected function isOutputAsZip()
     {
         // check relations
         return count($this->datalist) > 1;
+    }
+    
+    public function saveAsFile($csvdir, $files)
+    {
+        foreach ($files as $f) {
+            // csv pathz
+            $csv_name = $this->filebasename . '.csv';
+            $csv_path = path_join($csvdir, $csv_name);
+            $writer = $this->createWriter($f['spreadsheet']);
+            
+            // append bom if config
+            if (boolval(config('exment.export_append_csv_bom', false))) {
+                $writer->setUseBOM(true);
+            }
+
+            $writer->save($csv_path);
+
+            // close workbook and release memory
+            $f['spreadsheet']->disconnectWorksheets();
+            $f['spreadsheet']->garbageCollect();
+            unset($writer);
+        }
     }
     
     public function createResponse($files)
@@ -110,6 +157,12 @@ class Csv extends FormatBase
         if (count($files) == 1) {
             return response()->stream(function () use ($files) {
                 $writer = $this->createWriter($files[0]['spreadsheet']);
+
+                // append bom if config
+                if (boolval(config('exment.export_append_csv_bom', false))) {
+                    $writer->setUseBOM(true);
+                }
+
                 $writer->save('php://output');
                 // close workbook and release memory
                 $files[0]['spreadsheet']->disconnectWorksheets();
@@ -137,6 +190,12 @@ class Csv extends FormatBase
                 $csv_name = $f['name'] . '.csv';
                 $csv_path = path_join($csvdir, $csv_name);
                 $writer = $this->createWriter($f['spreadsheet']);
+                
+                // append bom if config
+                if (boolval(config('exment.export_append_csv_bom', false))) {
+                    $writer->setUseBOM(true);
+                }
+
                 $writer->save($csv_path);
                 $zip->addFile($csv_path, $csv_name);
                 $csv_paths[] = $csv_path;
@@ -160,7 +219,7 @@ class Csv extends FormatBase
         $filename = $this->getFileName();
         return [
             'Content-Type'        => 'application/force-download',
-            'Content-Disposition' => "attachment; filename=\"$filename\"",
+            'Content-disposition' => "attachment; filename*=UTF-8''". rawurlencode($filename),
         ];
     }
 
@@ -178,7 +237,7 @@ class Csv extends FormatBase
     /**
      * Get all csv's row count
      *
-     * @param [type] $spreadsheet
+     * @param string|array|\Illuminate\Support\Collection $files
      * @return int
      */
     protected function getRowCount($files) : int
@@ -203,10 +262,22 @@ class Csv extends FormatBase
 
     protected function getCsvArray($file)
     {
+        $original_locale = setlocale(LC_CTYPE, 0);
+
+        // set C locale
+        if (0 === strpos(PHP_OS, 'WIN')) {
+            setlocale(LC_CTYPE, 'C');
+        }
+
         $reader = $this->createReader();
         $reader->setInputEncoding('UTF-8');
         $reader->setDelimiter(",");
         $spreadsheet = $reader->load($file);
-        return $spreadsheet->getActiveSheet()->toArray();
+        $array = $spreadsheet->getActiveSheet()->toArray();
+
+        // revert to original locale
+        setlocale(LC_CTYPE, $original_locale);
+
+        return $array;
     }
 }

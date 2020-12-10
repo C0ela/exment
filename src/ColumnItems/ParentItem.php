@@ -20,13 +20,31 @@ class ParentItem implements ItemInterface
      */
     protected $parent_table;
     
-    public function __construct($custom_table, $custom_value)
+    /**
+     * this custom relation
+     */
+    protected $custom_relation;
+    
+    /**
+     * specifying the parent table
+     */
+    protected $target_parent = false;
+    
+    public function __construct($custom_table, $custom_value, $parent_table = null)
     {
         $this->custom_table = $custom_table;
         $this->value = $this->getTargetValue($custom_value);
 
-        $relation = CustomRelation::with('parent_custom_table')->where('child_custom_table_id', $this->custom_table->id)->first();
+        $relation = CustomRelation::with('parent_custom_table')->where('child_custom_table_id', $this->custom_table->id);
+        
+        if (isset($parent_table)) {
+            $relation = $relation->where('parent_custom_table_id', $parent_table->id);
+            $this->target_parent = true;
+        }
+        $relation = $relation->first();
+
         if (isset($relation)) {
+            $this->custom_relation = $relation;
             $this->parent_table = $relation->parent_custom_table;
         }
 
@@ -40,6 +58,8 @@ class ParentItem implements ItemInterface
     {
         if (array_get($this->options, 'grid_column')) {
             return 'parent_id';
+        } elseif ($this->target_parent) {
+            return 'parent_id_'.$this->parent_table->table_name.'_'.$this->custom_table->table_name;
         } else {
             return 'parent_id_'.$this->custom_table->table_name;
         }
@@ -80,18 +100,18 @@ class ParentItem implements ItemInterface
     /**
      * get text(for display)
      */
-    public function text()
+    protected function _text($v)
     {
-        return isset($this->value) ? $this->value->getLabel() : null;
+        return isset($v) ? $v->getLabel() : null;
     }
 
     /**
      * get html(for display)
      * *this function calls from non-escaping value method. So please escape if not necessary unescape.
      */
-    public function html()
+    protected function _html($v)
     {
-        return isset($this->value) ? $this->value->getUrl(true) : null;
+        return isset($v) ? $v->getUrl(true) : null;
     }
 
     /**
@@ -130,17 +150,27 @@ class ParentItem implements ItemInterface
         return $this->custom_table;
     }
 
+    /**
+     * Get relation.
+     *
+     * @return CustomRelation|null
+     */
+    public function getRelation()
+    {
+        return $this->custom_relation;
+    }
+
     protected function getTargetValue($custom_value)
     {
         if (is_null($custom_value)) {
             return;
         }
-
-        if (!isset($custom_value->parent_id) || !isset($custom_value->parent_type)) {
+        if (is_null($this->custom_relation)) {
             return;
         }
 
-        return getModelName($custom_value->parent_type)::find($custom_value->parent_id);
+        $relation_name = $this->custom_relation->getRelationName();
+        return $custom_value->{$relation_name};
     }
     
     /**
@@ -199,7 +229,13 @@ class ParentItem implements ItemInterface
 
     public static function getItem(...$args)
     {
-        list($custom_table, $custom_value) = $args + [null, null];
+        list($custom_table, $custom_value, $parent_table) = $args + [null, null, null];
         return new self($custom_table, $custom_value);
+    }
+
+    public static function getItemWithParent(...$args)
+    {
+        list($custom_table, $parent_table) = $args + [null, null];
+        return new self($custom_table, null, $parent_table);
     }
 }

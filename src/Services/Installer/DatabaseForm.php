@@ -87,7 +87,14 @@ class DatabaseForm
             $inputs['DB_' . strtoupper($s)] = $request->get($s);
         }
 
-        $this->setEnv($inputs);
+        
+        try {
+            $this->setEnv($inputs);
+        } catch (\Exception $ex) {
+            return back()->withInput()->withErrors([
+                'database_canconnection' => exmtrans('install.error.cannot_write_env'),
+            ]);
+        }
 
         InstallService::setInitializeStatus(InitializeStatus::DATABASE);
 
@@ -100,7 +107,7 @@ class DatabaseForm
     /**
      * Check Database Connection
      *
-     * @param [type] $request
+     * @param \Illuminate\Http\Request $request
      * @return boolean is connect database
      */
     protected function canDatabaseConnection($request)
@@ -129,18 +136,36 @@ class DatabaseForm
     /**
      * Check database minimum version.
      *
-     * @return void
+     * @return bool|string if true, success, if false, return message.
      */
     protected function checkDatabaseVersion()
     {
         $version = $this->connection()->getVersion();
 
-        if (version_compare($version, Define::DATABASE_MIN_VERSION[$this->database_default]) >= 0) {
+        $database_version = Define::DATABASE_VERSION[$this->database_default];
+
+        $result = true;
+        $message_lt = false;
+        // check min
+        if (version_compare($version, $database_version['min']) < 0) {
+            $result = false;
+        }
+
+        // check max(less than)
+        if (array_has($database_version, 'max_lt')) {
+            $message_lt = true;
+            if (version_compare($version, $database_version['max_lt']) >= 0) {
+                $result = false;
+            }
+        }
+
+        if ($result) {
             return true;
         }
 
-        $errorMessage = exmtrans('install.error.not_require_database_version', [
-            'min' => Define::DATABASE_MIN_VERSION[$this->database_default],
+        $errorMessage = exmtrans('install.error.not_require_database_version_' . ($message_lt ? 'min_maxlt' : 'min'), [
+            'min' => $database_version['min'],
+            'max_lt' => ($message_lt ? $database_version['max_lt'] : null),
             'database' => Define::DATABASE_TYPE[$this->database_default],
             'current' => $version
         ]);
@@ -151,7 +176,7 @@ class DatabaseForm
     /**
      * Check database mariadb and mysql mistake/
      *
-     * @return void
+     * @return bool|string if true, success, if false, return message.
      */
     protected function checkDatabaseMatch()
     {
@@ -182,7 +207,7 @@ class DatabaseForm
     /**
      * Check PHP version
      *
-     * @return void
+     * @return bool|string if true, success, if false, return message.
      */
     protected function checkPhpVersion()
     {

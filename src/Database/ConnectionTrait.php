@@ -5,6 +5,20 @@ namespace Exceedone\Exment\Database;
 trait ConnectionTrait
 {
     /**
+     * Get a new query builder instance.
+     *
+     * @return \Exceedone\Exment\Database\Query\ExtendedBuilder
+     */
+    public function query()
+    {
+        return new \Exceedone\Exment\Database\Query\ExtendedBuilder(
+            $this,
+            $this->getQueryGrammar(),
+            $this->getPostProcessor()
+        );
+    }
+
+    /**
      * Get database version.
      *
      * @return void
@@ -17,11 +31,21 @@ trait ConnectionTrait
     /**
      * Check mariadb
      *
-     * @return void
+     * @return bool
      */
     public function isMariaDB()
     {
         return $this->getSchemaBuilder()->isMariaDB();
+    }
+
+    /**
+     * Check SqlServer
+     *
+     * @return bool
+     */
+    public function isSqlServer()
+    {
+        return $this->getSchemaBuilder()->isSqlServer();
     }
 
     public function canConnection()

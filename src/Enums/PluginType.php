@@ -2,9 +2,27 @@
 
 namespace Exceedone\Exment\Enums;
 
+use Exceedone\Exment\Model\Plugin;
 use Exceedone\Exment\Services\Plugin\PluginDocumentDefault;
 use Exceedone\Exment\Services\Plugin\PluginPublicDefault;
 
+/**
+ * Plugin Type.
+ *
+ * @method static PluginType TRIGGER()
+ * @method static PluginType PAGE()
+ * @method static PluginType API()
+ * @method static PluginType DOCUMENT()
+ * @method static PluginType BATCH()
+ * @method static PluginType DASHBOARD()
+ * @method static PluginType IMPORT()
+ * @method static PluginType SCRIPT()
+ * @method static PluginType STYLE()
+ * @method static PluginType VALIDATOR()
+ * @method static PluginType EXPORT()
+ * @method static PluginType BUTTON()
+ * @method static PluginType EVENT()
+ */
 class PluginType extends EnumBase
 {
     public const TRIGGER = '0';
@@ -21,6 +39,10 @@ class PluginType extends EnumBase
     public const BUTTON = '11';
     public const EVENT = '12';
     
+    /**
+     *
+     * @return array
+     */
     public static function PLUGIN_TYPE_PUBLIC_CLASS()
     {
         return [
@@ -32,6 +54,10 @@ class PluginType extends EnumBase
         ];
     }
 
+    /**
+     *
+     * @return array
+     */
     public static function PLUGIN_TYPE_PLUGIN_PAGE()
     {
         return [
@@ -41,7 +67,23 @@ class PluginType extends EnumBase
         ];
     }
 
+    /**
+     *
+     * @return array
+     */
+    public static function PLUGIN_TYPE_PLUGIN_USE_VIEW()
+    {
+        return [
+            static::PAGE,
+            static::DASHBOARD,
+            static::BUTTON,
+        ];
+    }
 
+    /**
+     *
+     * @return array
+     */
     public static function PLUGIN_TYPE_CUSTOM_TABLE()
     {
         return [
@@ -57,9 +99,8 @@ class PluginType extends EnumBase
 
     /**
      * Use plugin permission
-     * 
      *
-     * @return void
+     * @return array
      */
     public static function PLUGIN_TYPE_FILTER_ACCESSIBLE()
     {
@@ -78,7 +119,7 @@ class PluginType extends EnumBase
     /**
      * Use plugin with button
      *
-     * @return void
+     * @return array
      */
     public static function PLUGIN_TYPE_BUTTON()
     {
@@ -92,7 +133,7 @@ class PluginType extends EnumBase
     /**
      * Use plugin with event
      *
-     * @return void
+     * @return array
      */
     public static function PLUGIN_TYPE_EVENT()
     {
@@ -103,9 +144,9 @@ class PluginType extends EnumBase
     }
 
     /**
-     * Use plugin with event
+     * Use plugin with URL
      *
-     * @return void
+     * @return array
      */
     public static function PLUGIN_TYPE_URL()
     {
@@ -115,12 +156,14 @@ class PluginType extends EnumBase
         ];
     }
 
+
     /**
      * Get plugin class using plugin type
      *
-     * @param [type] $plugin
+     * @param string $plugin_type
+     * @param Plugin $plugin
      * @param array $options
-     * @return void
+     * @return mixed
      */
     public static function getPluginClass($plugin_type, $plugin, $options = [])
     {
@@ -161,6 +204,7 @@ class PluginType extends EnumBase
                         [
                             'workflow_action' => array_get($options, 'workflow_action'),
                             'notify' => array_get($options, 'notify'),
+                            'selected_custom_values' => array_get($options, 'selected_custom_values'),
                         ]
                     );
                 case PluginType::BATCH:
@@ -175,7 +219,7 @@ class PluginType extends EnumBase
                     return new $classname($plugin, array_get($options, 'custom_table'));
                 case PluginType::VALIDATOR:
                     $custom_value = !is_null($options['custom_value']) ? $options['custom_value'] : $options['id'];
-                    return new $classname($plugin, array_get($options, 'custom_table'), $custom_value, array_get($options, 'input_value'));
+                    return new $classname($plugin, array_get($options, 'custom_table'), $custom_value, $options);
             }
         }
 
@@ -196,7 +240,7 @@ class PluginType extends EnumBase
      *
      * @param mixed $plugin_type
      * @param array $options
-     * @return void
+     * @return string
      */
     public static function getPluginClassShortName($plugin_type, $plugin, $options = [])
     {

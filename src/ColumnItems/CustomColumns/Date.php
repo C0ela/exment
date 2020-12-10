@@ -14,7 +14,7 @@ class Date extends CustomItem
 {
     protected $format = 'Y-m-d';
 
-    public function text()
+    protected function _text($v)
     {
         // if not empty format, using carbon
         $format = array_get($this->custom_column, 'options.format');
@@ -25,25 +25,24 @@ class Date extends CustomItem
             $format = $this->getDisplayFormat();
         }
         
-        if (!isset($this->value)) {
+        if (!isset($v)) {
             return null;
         }
 
         if (!is_nullorempty($format) && !boolval(array_get($this->options, 'summary'))) {
-            return $this->getDateUseValue($format);
+            return $this->getDateUseValue($v, $format);
         }
 
         // else, return
-        return $this->value();
+        return $this->_value($v);
     }
 
     /**
-     * get cast name for sort
+     * get cast Options
      */
-    public function getCastName()
+    protected function getCastOptions()
     {
-        $grammar = \DB::getQueryGrammar();
-        return $grammar->getCastString(DatabaseDataType::TYPE_DATE, true);
+        return [DatabaseDataType::TYPE_DATE, true, []];
     }
 
     protected function getDisplayFormat()
@@ -62,21 +61,21 @@ class Date extends CustomItem
             return null;
         }
 
-        return $this->getDateUseValue($this->format);
+        return $this->getDateUseValue($this->value, $this->format);
     }
 
     /**
      * Get date again use format
      *
-     * @return void
+     * @return \Carbon\Carbon|null
      */
-    protected function getDateUseValue($format)
+    protected function getDateUseValue($v, $format)
     {
-        if (is_array($this->value())) {
-            return (new \Carbon\Carbon(array_get($this->value(), 'date')))->format($format) ?? null;
+        if (is_array($v)) {
+            return (new \Carbon\Carbon(array_get($v, 'date')))->format($format) ?? null;
         }
 
-        return (new \Carbon\Carbon($this->value()))->format($format) ?? null;
+        return (new \Carbon\Carbon($v))->format($format) ?? null;
     }
 
     protected function getAdminFieldClass()
@@ -89,7 +88,7 @@ class Date extends CustomItem
     
     protected function getAdminFilterClass()
     {
-        return Filter\BetweenDatetime::class;
+        return Filter\BetweenDate::class;
     }
 
     protected function getCustomField($classname, $form_column_options = null, $column_name_prefix = null)
@@ -120,7 +119,7 @@ class Date extends CustomItem
     /**
      * Whether this is autodate
      *
-     * @return void
+     * @return true
      */
     protected function autoDate()
     {
@@ -146,7 +145,7 @@ class Date extends CustomItem
     /**
      * Whether only display
      *
-     * @return void
+     * @return bool
      */
     protected function displayDate()
     {

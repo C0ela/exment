@@ -33,8 +33,8 @@ class ApiController extends AdminControllerBase
 
     /**
      * get login user info
-     * @param mixed $id
-     * @return mixed
+     * @param Request $request
+     * @return array|null
      */
     public function me(Request $request)
     {
@@ -198,11 +198,30 @@ class ApiController extends AdminControllerBase
     }
 
     /**
+     * get view
+     * @param mixed $idOrSuuid if length is 20, use suuid
+     * @return mixed
+     */
+    public function view(Request $request, $idOrSuuid)
+    {
+        $query = CustomView::query();
+        if (strlen($idOrSuuid) == 20) {
+            $query->where('suuid', $idOrSuuid);
+        } else {
+            $query->where('id', $idOrSuuid);
+        }
+
+        return $query->first();
+    }
+    
+
+
+    /**
      * get columns that belongs table using column id
      * 1. find column and get column info
      * 2. get column target table
      * 3. get columns that belongs to target table
-     * @param mixed select_table custon_column id
+     * @param mixed $id select_table custon_column id
      */
     public function targetBelongsColumns($id)
     {
@@ -270,7 +289,7 @@ class ApiController extends AdminControllerBase
                 'target_user_id' => $target_user,
                 'notify_subject' => $request->get('notify_subject'),
                 'notify_body' => $request->get('notify_body'),
-                'trigger_user_id' => \Exment::user()->getUserId()
+                'trigger_user_id' => \Exment::getUserId()
             ]);
     
             $notify->saveOrFail();
@@ -298,8 +317,7 @@ class ApiController extends AdminControllerBase
         }
 
         // get notify NotifyNavbar list
-        $query = NotifyNavbar::where('target_user_id', \Exment::user()->getUserId())
-            ->orderBy('created_at', 'desc');
+        $query = NotifyNavbar::where('target_user_id', \Exment::getUserId());
                 
         if (!boolval($request->get('all', false))) {
             $query->where('read_flg', false);
@@ -330,9 +348,8 @@ class ApiController extends AdminControllerBase
     public function notifyPage(Request $request)
     {
         // get notify NotifyNavbar list
-        $query = NotifyNavbar::where('target_user_id', \Exment::user()->getUserId())
-            ->where('read_flg', false)
-            ->orderBy('created_at', 'desc');
+        $query = NotifyNavbar::where('target_user_id', \Exment::getUserId())
+            ->where('read_flg', false);
         
         $count = $query->count();
         $list = $query->take(5)->get();
@@ -374,16 +391,14 @@ class ApiController extends AdminControllerBase
         }
 
         $results = collect();
+        // default count
+        $count = config('exment.api_default_data_count', 20);
         foreach ($keys as $key) {
             $custom_table = CustomTable::getEloquent($key);
 
             if (($code = $custom_table->enableAccess()) !== true) {
                 return abortJson(403, ErrorCode::PERMISSION_DENY());
             }
-
-            // get model filtered using role
-            $model = getModelName($custom_table)::query();
-            \Exment::user()->filterModel($model);
 
             $validator = \Validator::make($request->all(), [
                 'q' => 'required',
@@ -413,13 +428,12 @@ class ApiController extends AdminControllerBase
                         'id' => $key . '_' . $value->id,
                         'text' => $value->label,
                     ];
-                }),
-                $results
+                })
             );
         }
 
         // get as paginator
-        $paginator = new \Illuminate\Pagination\LengthAwarePaginator($results, count($results), count($results), 1);
+        $paginator = new \Illuminate\Pagination\LengthAwarePaginator($results, count($results), $count, 1);
 
         return $paginator;
     }

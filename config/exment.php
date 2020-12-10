@@ -49,13 +49,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | exment debug mode
+    | exment debug mode request
     |--------------------------------------------------------------------------
     |
-    | if true, output sql log to laravel.log
+    | if true, log request in laravel.log
     |
     */
-    'debugmode' => env('EXMENT_DEBUG_MODE', false),
+    'debugmode_request' => env('EXMENT_DEBUG_MODE_REQUEST', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | exment debug mode sql
+    |--------------------------------------------------------------------------
+    |
+    | if true, log sql in laravel.log
+    |
+    */
+    'debugmode_sql' => env('EXMENT_DEBUG_MODE_SQL', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -219,6 +229,16 @@ return [
     
     /*
     |--------------------------------------------------------------------------
+    | Disabled custom login
+    |--------------------------------------------------------------------------
+    |
+    | Disabled custom login force
+    |
+    */
+    'custom_login_disabled' => env('EXMENT_CUSTOM_LOGIN_DISABLED', false),
+    
+    /*
+    |--------------------------------------------------------------------------
     | exment use 2 factor
     |--------------------------------------------------------------------------
     |
@@ -244,6 +264,14 @@ return [
     |
     */
     'login_providers' => env('EXMENT_LOGIN_PROVIDERS', []),
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Disable login header logo
+    |--------------------------------------------------------------------------
+    |
+    */
+    'disable_login_header_logo' => env('EXMENT_DISABLE_LOGIN_HEADER_LOGO', false),
     
     /*
     |--------------------------------------------------------------------------
@@ -280,6 +308,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Notify skip self target
+    |--------------------------------------------------------------------------
+    |
+    | If data update, and send user if login user, whether skip notify.
+    |
+    */
+    'notify_skip_self_target' => env('EXMENT_NOTIFY_SKIP_SELF_TARGET', true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Notify navbar
     |--------------------------------------------------------------------------
     |
@@ -296,14 +334,7 @@ return [
     | The colors showing chart background
     |
     */
-    'chart_backgroundColor' => [
-        "#FF6384",
-        "#36A2EB",
-        "#FFCE56",
-        "#339900",
-        "#ff6633",
-        "#cc0099"
-    ],
+    'chart_backgroundColor' => env('EXMENT_CHART_BG_COLOR', '#FF6384,#36A2EB,#FFCE56,#339900,#ff6633,#cc0099'),
 
     /*
     |--------------------------------------------------------------------------
@@ -349,6 +380,36 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Calendar Max size Count
+    |--------------------------------------------------------------------------
+    |
+    | Set max size calendar (for performance)
+    |
+    */
+    'calendar_max_size_count' => env('EXMENT_CALENDAR_MAX_SIZE_COUNT', 300),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Search Filter Ajax
+    |--------------------------------------------------------------------------
+    |
+    | Custom Value's filter as ajax
+    |
+    */
+    'custom_value_filter_ajax' => env('EXMENT_CUSTOM_VALUE_FILTER_AJAX', true),
+  
+    /*
+    |--------------------------------------------------------------------------
+    | search document
+    |--------------------------------------------------------------------------
+    |
+    | Whether searching document file
+    |
+    */
+    'search_document' => env('EXMENT_SEARCH_DOCUMENT', false),
+  
+    /*
+    |--------------------------------------------------------------------------
     | Mail Setting From env file
     |--------------------------------------------------------------------------
     |
@@ -389,6 +450,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | session Expire On Close
+    |--------------------------------------------------------------------------
+    |
+    | If true, if close browser, logout
+    |
+    */
+    'session_expire_on_close' => env('EXMENT_SESSION_EXPIRE_ON_CLOSE', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | SELECT TABLE LIMIT COUNT
     |--------------------------------------------------------------------------
     |
@@ -396,6 +467,16 @@ return [
     |
     */
     'select_table_limit_count' => env('EXMENT_SELECT_TABLE_LIMIT_COUNT', 100),
+
+    /*
+    |--------------------------------------------------------------------------
+    | SELECT TABLE MODAL SEARCH DISABLED
+    |--------------------------------------------------------------------------
+    |
+    | It is limit count whether ajax or select.
+    |
+    */
+    'select_table_modal_search_disabled' => env('EXMENT_SELECT_TABLE_MODAL_SEARCH_DISABLED', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -439,6 +520,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | File Drag & Drop form disabled
+    |--------------------------------------------------------------------------
+    |
+    | File Drag & Drop form disabled
+    |
+    */
+    'file_drag_drop_disabled' => env('EXMENT_FILE_DRAG_DROP_DISABLED', false),
+    
+    /*
+    |--------------------------------------------------------------------------
     | Custom Value Show Hide hidefield
     |--------------------------------------------------------------------------
     |
@@ -466,7 +557,7 @@ return [
     | Disabled user view, only system view
     |
     */
-    'userview_disabled' => env('EXMENT_USER_VIEW_DISABLED', false),
+    'userview_disabled' => env('EXMENT_USER_VIEW_DISABLED', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -476,7 +567,7 @@ return [
     | Disabled user dashboard, only system dashboard
     |
     */
-    'userdashboard_disabled' => env('EXMENT_USER_DASHBOARD_DISABLED', false),
+    'userdashboard_disabled' => env('EXMENT_USER_DASHBOARD_DISABLED', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -570,6 +661,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | export bom csv
+    |--------------------------------------------------------------------------
+    |
+    | Export csv appending BOM
+    |
+    */
+    'export_append_csv_bom' => env('EXMENT_EXPORT_APPEND_CSV_BOM', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Select relation linkage disabled
     |--------------------------------------------------------------------------
     |
@@ -579,6 +680,17 @@ return [
     */
     'select_relation_linkage_disabled' => env('SELECT_RELATION_LINKAGE_DISABLED', false),
 
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Textarea html space to tag
+    |--------------------------------------------------------------------------
+    |
+    | When showing html if textarea, space to tag.
+    | 
+    */
+    'textarea_space_tag' => env('EXMENT_TEXTAREA_SPACE_TAG', true),
+    
     /*
     |--------------------------------------------------------------------------
     | API default get data count 
@@ -649,4 +761,135 @@ return [
     |
     */
     '7zip_dir' => env('EXMENT_7ZIP_DIR', 'C:\\Program Files\\7-Zip'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | File download inline
+    |--------------------------------------------------------------------------
+    | 
+    */
+    'file_download_inline_extensions' => env('EXMENT_FILE_DOWNLOAD_INLINE_EXTENSIONS', ''),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Document upload max count one request
+    |--------------------------------------------------------------------------
+    | 
+    */
+    'document_upload_max_count' => env('EXMENT_DOCUMENT_UPLOAD_MAX_COUNT', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Disabled show datalist table button for all user
+    |--------------------------------------------------------------------------
+    |
+    | Disabled show datalist table button for all user
+    |
+    */
+    'datalist_table_button_disabled' => env('EXMENT_TABLE_BUTTON_DISABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Disabled show table setting button except admin user
+    |--------------------------------------------------------------------------
+    |
+    | Disabled show table setting button except admin user
+    |
+    */
+    'datalist_table_button_disabled_user' => env('EXMENT_TABLE_BUTTON_DISABLED_USER', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Disabled show view button for all user
+    |--------------------------------------------------------------------------
+    |
+    | Disabled show view button for all user
+    |
+    */
+    'datalist_view_button_disabled' => env('EXMENT_VIEW_BUTTON_DISABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Disabled show view button except admin user
+    |--------------------------------------------------------------------------
+    |
+    | Disabled show view button except admin user
+    |
+    */
+    'datalist_view_button_disabled_user' => env('EXMENT_VIEW_BUTTON_DISABLED_USER', false),
+    
+    /*
+    |--------------------------------------------------------------------------
+    | html allowed tags(for HTML Purifier)
+    |--------------------------------------------------------------------------
+    |
+    | html allowed tag list. Use default settings if not set
+    |
+    */
+    'html_allowed' => env('EXMENT_HTML_ALLOWED', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | html allowed tag attributes(for HTML Purifier)
+    |--------------------------------------------------------------------------
+    |
+    | html allowed tag atrtribute list. Use default settings if not set
+    |
+    */
+    'html_allowed_attributes' => env('EXMENT_HTML_ALLOWED_ATTRIBUTES', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | css allowed tag properties(for HTML Purifier)
+    |--------------------------------------------------------------------------
+    |
+    | css allowed tag properties list. Use default settings if not set
+    |
+    */
+    'css_allowed_properties' => env('EXMENT_CSS_ALLOWED_PROPERTIES', null),
+    
+    /*
+    |--------------------------------------------------------------------------
+    | html allowed tags(for TinyMCE)
+    |--------------------------------------------------------------------------
+    |
+    | html allowed tag list. Use default settings if not set
+    |
+    */
+    'html_allowed_editor' => env('EXMENT_HTML_ALLOWED_EDITOR', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | diable upload images
+    |--------------------------------------------------------------------------
+    |
+    | disable paste image
+    |
+    */
+    'diable_upload_images_editor' => env('EXMENT_DIABLE_UPLOAD_IMAGES_EDITOR', false),
+
+
+
+
+
+  
+    /*
+    |--------------------------------------------------------------------------
+    | Reverse Proxy IPs
+    |--------------------------------------------------------------------------
+    |
+    | Set trust proxy IPs.
+    | *This config doesn't want to copy backup restore, so set key is ADMIN_, not EXMENT_.*
+    */  
+    'trust_proxy_ips' => env('ADMIN_TRUST_PROXY_IPS', null),
+  
+    /*
+    |--------------------------------------------------------------------------
+    | Reverse Proxy headers
+    |--------------------------------------------------------------------------
+    |
+    | Set trust proxy headers. set as Request::{name}.
+    | *This config doesn't want to copy backup restore, so set key is ADMIN_, not EXMENT_.*
+    */  
+    'trust_proxy_headers' => env('ADMIN_TRUST_PROXY_HEADERS', null),
 ];

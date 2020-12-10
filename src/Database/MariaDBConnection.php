@@ -14,7 +14,7 @@ class MariaDBConnection extends MySqlConnection
     /**
      * Get a schema builder instance for the connection.
      *
-     * @return Builder
+     * @return \Illuminate\Database\Schema\Builder
      */
     public function getSchemaBuilder()
     {
@@ -53,5 +53,11 @@ class MariaDBConnection extends MySqlConnection
     protected function getDefaultPostProcessor()
     {
         return new MariaDBProcessor;
+    }
+
+    
+    public function getDatabaseDriverName() : string
+    {
+        return 'MariaDB';
     }
 }

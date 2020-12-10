@@ -2,7 +2,6 @@
 namespace Exceedone\Exment\Auth;
 
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Session;
 use Illuminate\Auth\Authenticatable;
 use Exceedone\Exment\Auth\Permission as AuthPermission;
 use Exceedone\Exment\Model\System;
@@ -16,6 +15,7 @@ use Exceedone\Exment\Enums\Permission;
 use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Enums\JoinedOrgFilterType;
 use Exceedone\Exment\Enums\PluginType;
+use Exceedone\Exment\Services\AuthUserOrgHelper;
 
 trait HasPermissions
 {
@@ -99,7 +99,7 @@ trait HasPermissions
      * whethere has permission, permission level
      * $role_key * if set array, check whether either items.
      * Checking target plugin.
-     * @param string $id
+     * @param Plugin $plugin
      * @param array|string $role_key
      */
     public function hasPermissionPlugin($plugin, $role_key)
@@ -174,7 +174,7 @@ trait HasPermissions
     /**
      * Get all permissions of user.
      *
-     * @return mixed
+     * @return Collection
      */
     public function allPermissions() : Collection
     {
@@ -218,7 +218,7 @@ trait HasPermissions
     /**
      * Get all has permission tables of user.
      *
-     * @return mixed
+     * @return Collection
      */
     public function allHasPermissionTables($role_key) : Collection
     {
@@ -238,8 +238,8 @@ trait HasPermissions
      * If visible for permission_details.
      * called form menu
      *
-     * @param $item menu item
-     * @param $target_tables output target tables. for template export. default nothing item
+     * @param array|string $item
+     * @param array $target_tables output target tables. for template export. default nothing item
      *
      * @return bool
      */
@@ -263,7 +263,7 @@ trait HasPermissions
         // if $item has children, get children's visible result.
         // if children have true result, return true;
         if (array_key_exists('children', $item)) {
-            $first = collect($item['children'])->first(function ($child) use ($item, $target_tables) {
+            $first = collect($item['children'])->first(function ($child) use ($target_tables) {
                 return $this->visible($child, $target_tables);
             });
             return !is_null($first);
@@ -292,27 +292,14 @@ trait HasPermissions
 
     /**
      * filter target model
+     *
+     * @deprecated Please call $custom_view->filterModel($model, $callback);
      */
     public function filterModel($model, $custom_view = null, $callback = null)
     {
-        // if simple eloquent, throw
-        if ($model instanceof \Illuminate\Database\Eloquent\Model) {
-            throw new \Exception;
+        if (isset($$custom_view)) {
+            return $custom_view->filterModel($model, ['callback' => $callback]);
         }
-
-        // view filter setting --------------------------------------------------
-        // has $custom_view, filter
-        if (isset($custom_view)) {
-            if ($callback instanceof \Closure) {
-                call_user_func($callback, $model);
-            } else {
-                $custom_view->setValueFilters($model);
-            }
-            $custom_view->setValueSort($model);
-        }
-
-        ///// We don't need filter using role here because filter auto using global scope.
-
         return $model;
     }
 
@@ -323,8 +310,33 @@ trait HasPermissions
     public function getOrganizationIds($filterType = JoinedOrgFilterType::ALL)
     {
         return System::requestSession(Define::SYSTEM_KEY_SESSION_ORGANIZATION_IDS . '_' . $filterType, function () use ($filterType) {
-            return $this->base_user->getOrganizationIds($filterType);
+            //return $this->base_user->getOrganizationIds($filterType);
+            // if system doesn't use organization, return empty array.
+            if (!System::organization_available()) {
+                return [];
+            }
+            return AuthUserOrgHelper::getOrganizationIds($filterType, $this->base_user_id);
         });
+    }
+
+
+    /**
+     * Get user and organization ids for query whereInMultiple.
+     *
+     * @param string $filterType
+     * @return array offset 0 : type, 1 : user or organization id.
+     */
+    public function getUserAndOrganizationIds($filterType = JoinedOrgFilterType::ALL)
+    {
+        $results = [[SystemTableName::USER, $this->getUserId()]];
+
+        if (System::organization_available()) {
+            collect($this->getOrganizationIds($filterType))->each(function ($id) use (&$results) {
+                $results[] = [SystemTableName::ORGANIZATION, $id];
+            });
+        }
+        
+        return $results;
     }
 
     /**
@@ -370,7 +382,7 @@ trait HasPermissions
 
                 $role_details = $role_group_permission->permissions;
                 foreach ($role_details as $value) {
-                    if(!isset($permissions[$custom_table->table_name])){
+                    if (!isset($permissions[$custom_table->table_name])) {
                         $permissions[$custom_table->table_name] = [];
                     }
                     if (!array_key_exists($value, $permissions[$custom_table->table_name])) {
@@ -426,7 +438,7 @@ trait HasPermissions
 
                 $role_details = $role_group_permission->permissions;
                 foreach ($role_details as $value) {
-                    if(!isset($permissions[$plugin->id])){
+                    if (!isset($permissions[$plugin->id])) {
                         $permissions[$plugin->id] = [];
                     }
                     if (!array_key_exists($value, $permissions[$plugin->id])) {

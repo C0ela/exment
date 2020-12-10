@@ -16,6 +16,7 @@ use Exceedone\Exment\ColumnItems\CustomColumns;
 use Exceedone\Exment\Services\Auth2factor\Auth2factorService;
 use Exceedone\Exment\Services\PartialCrudService;
 use Encore\Admin\Form;
+use Encore\Admin\Widgets\Form as WidgetForm;
 use Encore\Admin\Grid;
 use Encore\Admin\Show;
 use \Html;
@@ -30,10 +31,19 @@ class Initialize
     public function handle(Request $request, \Closure $next)
     {
         if (!canConnection() || !hasTable(SystemTableName::SYSTEM)) {
-            $path = trim(admin_base_path('install'), '/');
-            if (!$request->is($path)) {
+            // Check install directory
+            if (!$this->isInstallPath($request)) {
+                // check has 'EXMENT_INITIALIZE' on .env directly
+                // if true, already installed
+                if (boolval(env('EXMENT_INITIALIZE', false))) {
+                    // Throwing error connecting database purposely.
+                    hasTable(SystemTableName::SYSTEM);
+                }
+
+                // If not initialized, return to install path
                 return redirect()->guest(admin_base_path('install'));
             }
+
             static::initializeConfig(false);
         } else {
             $initialized = System::initialized();
@@ -51,10 +61,24 @@ class Initialize
             static::initializeConfig();
         }
         
-        static::requireBootstrap();
+        //static::requireBootstrap();
 
         return $next($request);
     }
+
+    /**
+     * Whether this path is "install"
+     *
+     * @param Request $request
+     * @return boolean
+     */
+    protected function isInstallPath(Request $request)
+    {
+        // Check install directory
+        $path = trim(admin_base_path('install'), '/');
+        return $request->is($path);
+    }
+
 
     public static function initializeConfig($setDatabase = true)
     {
@@ -69,6 +93,11 @@ class Initialize
 
 
         ///// set config
+
+        // Only set if expire_on_close is false(default)
+        if (!boolval(Config::get('session.expire_on_close', false))) {
+            Config::set('session.expire_on_close', Config::get('exment.session_expire_on_close', false));
+        }
 
         // for password reset
         if (!Config::has('auth.passwords.exment_admins')) {
@@ -141,6 +170,11 @@ class Initialize
             'root' => storage_path('app/admin_tmp'),
         ]);
 
+        Config::set('filesystems.disks.tmpupload', [
+            'driver' => 'local',
+            'root' => storage_path('app/tmpupload'),
+        ]);
+
         Config::set('filesystems.disks.admin', [
             'driver' => 'exment-driver-exment',
             'mergeFrom' => 'exment',
@@ -171,15 +205,17 @@ class Initialize
         ]);
 
         // mysql setting
-        Config::set('database.connections.mysql.strict', false);
-        Config::set('database.connections.mysql.options', [
-            PDO::ATTR_CASE => PDO::CASE_LOWER,
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_ORACLE_NULLS => PDO::NULL_NATURAL,
-            PDO::ATTR_STRINGIFY_FETCHES => true,
-            PDO::ATTR_EMULATE_PREPARES => true,
-            PDO::MYSQL_ATTR_LOCAL_INFILE => true,
-        ]);
+        if (defined('PDO::MYSQL_ATTR_LOCAL_INFILE')) {
+            Config::set('database.connections.mysql.strict', false);
+            Config::set('database.connections.mysql.options', [
+                PDO::ATTR_CASE => PDO::CASE_LOWER,
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_ORACLE_NULLS => PDO::NULL_NATURAL,
+                PDO::ATTR_STRINGIFY_FETCHES => true,
+                PDO::ATTR_EMULATE_PREPARES => true,
+                PDO::MYSQL_ATTR_LOCAL_INFILE => true,
+            ]);
+        }
 
         // mariadb setting
         Config::set('database.connections.mariadb', Config::get('database.connections.mysql'));
@@ -190,7 +226,7 @@ class Initialize
         Config::set('admin.database.users_table', \Exceedone\Exment\Model\LoginUser::getTableName());
         Config::set('admin.database.users_model', \Exceedone\Exment\Model\LoginUser::class);
         Config::set('admin.enable_default_breadcrumb', false);
-        Config::set('admin.show_environment', false);
+        Config::set('session.show_environment', false);
 
 
         ///// set Exment-item class
@@ -237,51 +273,52 @@ class Initialize
             // Set system setting to config --------------------------------------------------
             // Site Name
             $val = System::site_name();
-            if (isset($val)) {
+            if (!is_nullorempty($val)) {
                 Config::set('admin.name', $val);
                 Config::set('admin.title', $val);
             }
 
             // Logo
             $val = System::site_logo();
-            if (isset($val)) {
+            if (!is_nullorempty($val)) {
                 Config::set('admin.logo', Html::image($val, 'header logo'));
             } else {
                 $val = System::site_name();
-                if (isset($val)) {
+                if (!is_nullorempty($val)) {
                     Config::set('admin.logo', esc_html($val));
                 }
             }
 
             // Logo(Short)
             $val = System::site_logo_mini();
-            if (isset($val)) {
+            if (!is_nullorempty($val)) {
                 Config::set('admin.logo-mini', Html::image($val, 'header logo mini'));
             } else {
                 $val = System::site_name_short();
-                if (isset($val)) {
+                if (!is_nullorempty($val)) {
                     Config::set('admin.logo-mini', esc_html($val));
                 }
             }
 
             // Site Skin
             $val = System::site_skin();
-            if (isset($val)) {
+            if (!is_nullorempty($val)) {
                 Config::set('admin.skin', esc_html($val));
             }
 
             // Site layout
             $val = System::site_layout();
-            if (isset($val)) {
+            if (!is_nullorempty($val)) {
                 Config::set('admin.layout', array_get(Define::SYSTEM_LAYOUT, $val));
             }
 
             // Date format
+            $list = null;
             $val = System::default_date_format();
-            if (isset($val)) {
+            if (!is_nullorempty($val)) {
                 $list = exmtrans("system.date_format_list.$val");
             }
-            if (isset($list) && is_array($list) && count($list) > 2) {
+            if (!is_nullorempty($list) && is_array($list) && count($list) > 2) {
                 Config::set('admin.date_format', $list[0]);
                 Config::set('admin.datetime_format', $list[1]);
                 Config::set('admin.time_format', $list[2]);
@@ -323,7 +360,7 @@ class Initialize
         }
     }
 
-    protected static function requireBootstrap()
+    public static function requireBootstrap()
     {
         $file = config('exment.bootstrap', exment_app_path('bootstrap.php'));
         if (!\File::exists($file)) {
@@ -354,6 +391,8 @@ class Initialize
                 $tools->disableView();
             });
         });
+        Form\Footer::$defaultSubmitLabel = trans('admin.save');
+        WidgetForm::$defaultSubmitLabel = trans('admin.save');
 
         Grid\Tools::$defaultPosition = 'right';
         Grid\Concerns\HasQuickSearch::$searchKey = 'query';
@@ -383,6 +422,8 @@ class Initialize
             'ajaxButton'        => Field\AjaxButton::class,
             'text'          => Field\Text::class,
             'password'          => Field\Password::class,
+            'encpassword'          => Field\EncPassword::class,
+            'bcrpassword'          => Field\BcrPassword::class,
             'number'        => Field\Number::class,
             'tinymce'        => Field\Tinymce::class,
             'image'        => Field\Image::class,
@@ -390,6 +431,7 @@ class Initialize
             'link'           => Field\Link::class,
             'exmheader'           => Field\Header::class,
             'description'           => Field\Description::class,
+            'descriptionHtml'           => Field\DescriptionHtml::class,
             'switchbool'          => Field\SwitchBoolField::class,
             'pivotMultiSelect'          => Field\PivotMultiSelect::class,
             'checkboxone'          => Field\Checkboxone::class,
@@ -397,7 +439,9 @@ class Initialize
             'tile'          => Field\Tile::class,
             'hasMany'           => Field\HasMany::class,
             'hasManyTable'           => Field\HasManyTable::class,
-            'relationTable'          => Field\RelationTable::class,
+            'hasManyJson'           => Field\HasManyJson::class,
+            'hasManyJsonTable'           => Field\HasManyJsonTable::class,
+            //'relationTable'          => Field\RelationTable::class,
             'embeds'          => Field\Embeds::class,
             'nestedEmbeds'          => Field\NestedEmbeds::class,
             'valueModal'          => Field\ValueModal::class,
@@ -406,8 +450,8 @@ class Initialize
             'systemValues'          => Field\SystemValues::class,
             
             ///// workflow
-            'workflowStatusSelects'          => Field\WorkFlow\StatusSelects::class,
-            'workflowOptions'          => Field\WorkFlow\Options::class,
+            'workflowStatusSelects'          => Field\Workflow\StatusSelects::class,
+            'workflowOptions'          => Field\Workflow\Options::class,
         ];
         foreach ($map as $abstract => $class) {
             Form::extend($abstract, $class);
@@ -416,51 +460,6 @@ class Initialize
         Show::extend('system_values', \Exceedone\Exment\Form\Show\SystemValues::class);
 
         Filter::extend('betweendatetime', \Exceedone\Exment\Grid\Filter\BetweenDatetime::class);
-    }
-
-    public static function logDatabase()
-    {
-        \DB::listen(function ($query) {
-            $sql = $query->sql;
-            for ($i = 0; $i < count($query->bindings); $i++) {
-                $binding = $query->bindings[$i];
-                if ($binding instanceof \DateTime) {
-                    $binding = $binding->format('Y-m-d H:i:s');
-                } elseif ($binding instanceof EnumBase) {
-                    $binding = $binding->toString();
-                }
-                $sql = preg_replace("/\?/", "'{$binding}'", $sql, 1);
-            }
-
-            $log_string = "TIME:{$query->time}ms;    SQL: $sql";
-            if (boolval(config('exment.debugmode_sqlfunction', false))) {
-                $function = static::getFunctionName();
-                $log_string .= ";    function: $function";
-            } elseif (boolval(config('exment.debugmode_sqlfunction1', false))) {
-                $function = static::getFunctionName(true);
-                $log_string .= ";    function: $function";
-            }
-
-            exmDebugLog($log_string);
-        });
-    }
-
-    protected static function getFunctionName($oneFunction = false)
-    {
-        $bt = debug_backtrace();
-        $functions = [];
-        $i = 0;
-        foreach ($bt as $b) {
-            if ($i > 1 && strpos(array_get($b, 'class'), 'Exceedone') !== false) {
-                $functions[] = $b['class'] . '->' . $b['function'] . '.' . array_get($b, 'line');
-            }
-
-            if ($oneFunction && count($functions) >= 1) {
-                break;
-            }
-
-            $i++;
-        }
-        return implode(" < ", $functions);
+        Filter::extend('exmwhere', \Exceedone\Exment\Grid\Filter\Where::class);
     }
 }

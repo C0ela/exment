@@ -5,17 +5,19 @@ namespace Exceedone\Exment\Controllers;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
-//use Encore\Admin\Widgets\Form;
-use Encore\Admin\Widgets\Table;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Model\CustomTable;
 use Exceedone\Exment\Model\CustomColumn;
+use Exceedone\Exment\Model\CustomColumnMulti;
 use Exceedone\Exment\Model\CustomForm;
 use Exceedone\Exment\Model\CustomFormColumn;
 use Exceedone\Exment\Model\CustomView;
 use Exceedone\Exment\Model\CustomViewColumn;
+use Exceedone\Exment\Model\System;
 use Exceedone\Exment\Form\Tools;
+use Exceedone\Exment\Enums\MultisettingType;
 use Exceedone\Exment\Enums\FormBlockType;
 use Exceedone\Exment\Enums\FormColumnType;
 use Exceedone\Exment\Enums\ConditionType;
@@ -36,7 +38,8 @@ class CustomColumnController extends AdminControllerTableBase
     {
         parent::__construct($custom_table, $request);
         
-        $this->setPageInfo(exmtrans("custom_column.header"), exmtrans("custom_column.header"), exmtrans("custom_column.description"), 'fa-list');
+        $title = exmtrans("custom_column.header") . ' : ' . ($custom_table ? $custom_table->table_view_name : null);
+        $this->setPageInfo($title, $title, exmtrans("custom_column.description"), 'fa-list');
     }
 
     /**
@@ -52,12 +55,16 @@ class CustomColumnController extends AdminControllerTableBase
         }
         return parent::index($request, $content);
     }
-
+    
+    
     /**
-     * Edit interface.
+     * Edit
      *
-     * @param $id
-     * @return Content
+     * @param Request $request
+     * @param Content $content
+     * @param string $tableKey
+     * @param string|int|null $id
+     * @return void|Response
      */
     public function edit(Request $request, Content $content, $tableKey, $id)
     {
@@ -93,22 +100,24 @@ class CustomColumnController extends AdminControllerTableBase
     protected function grid()
     {
         $grid = new Grid(new CustomColumn);
-        $grid->column('custom_table.table_view_name', exmtrans("custom_table.table"))->sortable();
         $grid->column('column_name', exmtrans("custom_column.column_name"))->sortable();
         $grid->column('column_view_name', exmtrans("custom_column.column_view_name"))->sortable();
         $grid->column('column_type', exmtrans("custom_column.column_type"))->sortable()->displayEscape(function ($val) {
             return array_get(ColumnType::transArray("custom_column.column_type_options"), $val);
         });
-        $grid->column('required', exmtrans("common.required"))->sortable()->display(function ($val) {
-            return getTrueMark($val);
+        $grid->column('required', exmtrans("common.required"))->display(function ($val) {
+            return \Exment::getTrueMark($val);
         });
-        $grid->column('index_enabled', exmtrans("custom_column.options.index_enabled"))->sortable()->display(function ($val) {
-            return getTrueMark($val);
+        $grid->column('index_enabled', exmtrans("custom_column.options.index_enabled"))->display(function ($val) {
+            return \Exment::getTrueMark($val);
         });
-        $grid->column('unique', exmtrans("custom_column.options.unique"))->sortable()->display(function ($val) {
-            return getTrueMark($val);
+        $grid->column('options->freeword_search', exmtrans("custom_column.options.freeword_search"))->display(function ($val) {
+            return \Exment::getTrueMark($val);
         });
-        $grid->column('order', exmtrans("custom_column.order"))->editable('number')->sortable();
+        $grid->column('unique', exmtrans("custom_column.options.unique"))->display(function ($val) {
+            return \Exment::getTrueMark($val);
+        });
+        $grid->column('order', exmtrans("custom_column.order"))->sortable()->editable();
 
         if (isset($this->custom_table)) {
             $grid->model()->where('custom_table_id', $this->custom_table->id);
@@ -132,20 +141,25 @@ class CustomColumnController extends AdminControllerTableBase
             // Remove the default id filter
             $filter->disableIdFilter();
             // Add a column filter
-            $filter->equal('column_name', exmtrans("custom_column.column_name"));
-            $filter->equal('column_view_name', exmtrans("custom_column.column_view_name"));
-            $filter->equal('column_type', exmtrans("custom_column.column_type"))->select(function ($val) {
-                return array_get(ColumnType::transArray("custom_column.column_type_options"), $val);
-            });
+            $filter->like('column_name', exmtrans("custom_column.column_name"));
+            $filter->like('column_view_name', exmtrans("custom_column.column_view_name"));
+            $filter->equal('column_type', exmtrans("custom_column.column_type"))->select(ColumnType::transArray("custom_column.column_type_options"));
 
-            $keys = ['required' => 'common', 'index_enabled' => 'custom_column.options', 'unique' => 'custom_column.options'];
+            $keys = ['required' => 'common', 'index_enabled' => 'custom_column.options', 'freeword_search' => 'custom_column.options', 'unique' => 'custom_column.options'];
             foreach ($keys as $key => $label) {
-                $filter->where(function ($query) use ($key, $label) {
-                    $query->whereIn("options->$key", [1, "1"]);
-                }, exmtrans("$label.$key"))->radio([
-                    '' => 'All',
-                    '1' => 'YES',
-                ]);
+                $filter->exmwhere(function ($query, $input) use ($key) {
+                    if (is_nullorempty($input)) {
+                        return;
+                    }
+                    if (isMatchString($input, 0)) {
+                        $query->where(function ($query) use ($key) {
+                            $query->whereIn("options->$key", [0, '0'])
+                                ->orWhereNull("options->$key");
+                        });
+                    } else {
+                        $query->whereIn("options->$key", [1, '1']);
+                    }
+                }, exmtrans("$label.$key"))->radio(\Exment::getYesNoAllOption());
             }
         });
         return $grid;
@@ -161,7 +175,7 @@ class CustomColumnController extends AdminControllerTableBase
         $controller = $this;
         $form = new Form(new CustomColumn);
         // set script
-        $ver = getExmentCurrentVersion();
+        $ver = \Exment::getExmentCurrentVersion();
         if (!isset($ver)) {
             $ver = date('YmdHis');
         }
@@ -189,32 +203,50 @@ class CustomColumnController extends AdminControllerTableBase
             ->required()
             ->rules("max:40")
             ->help(exmtrans('common.help.view_name'));
-        $form->select('column_type', exmtrans("custom_column.column_type"))
-        ->options(ColumnType::transArray("custom_column.column_type_options"))
-        ->attribute(['data-filtertrigger' =>true,
-            'data-linkage' => json_encode([
-                'options_select_import_column_id' => [
-                    'url' => admin_url('webapi/table/indexcolumns'),
-                    'text' => 'column_view_name',
-                ],
-                'options_select_export_column_id' => [
-                    'url' => admin_url('webapi/table/columns'),
-                    'text' => 'column_view_name',
-                ],
-                'options_select_target_view' => [
-                    'url' => admin_url('webapi/table/filterviews'),
-                    'text' => 'view_view_name',
-                ],
-            ]),
-            'data-linkage-expand' => json_encode(['custom_type' => true]),
-        ])
-        ->required();
 
         if (!isset($id)) {
             $id = $form->model()->id;
         }
-
         $column_type = isset($id) ? CustomColumn::getEloquent($id)->column_type : null;
+        if (!isset($id)) {
+            $form->select('column_type', exmtrans("custom_column.column_type"))
+                ->help(exmtrans("custom_column.help.column_type"))
+                ->options(function () {
+                    $arrays = collect(ColumnType::arrays())->filter(function ($arr) {
+                        if (System::organization_available() || $arr != ColumnType::ORGANIZATION) {
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    })->toArray();
+                    return getTransArray($arrays, "custom_column.column_type_options");
+                })
+                ->attribute(['data-filtertrigger' =>true,
+                    'data-linkage' => json_encode([
+                        'options_select_import_column_id' => [
+                            'url' => admin_url('webapi/table/indexcolumns'),
+                            'text' => 'column_view_name',
+                        ],
+                        'options_select_export_column_id' => [
+                            'url' => admin_url('webapi/table/columns'),
+                            'text' => 'column_view_name',
+                        ],
+                        'options_select_target_view' => [
+                            'url' => admin_url('webapi/table/filterviews'),
+                            'text' => 'view_view_name',
+                        ],
+                    ]),
+                    'data-linkage-expand' => json_encode(['custom_type' => true]),
+                ])
+                ->required();
+        } else {
+            $form->display('column_type', exmtrans("custom_column.column_type"))
+                ->displayText(function ($val) {
+                    return array_get(ColumnType::transArray("custom_column.column_type_options"), $val);
+                })->escape(false);
+            $form->hidden('column_type')->default($column_type);
+        }
+
         $form->embeds('options', exmtrans("custom_column.options.header"), function ($form) use ($column_type, $id, $controller) {
             $form->switchbool('required', exmtrans("common.required"));
             $form->switchbool('index_enabled', exmtrans("custom_column.options.index_enabled"))
@@ -222,7 +254,11 @@ class CustomColumnController extends AdminControllerTableBase
                     new Validator\CustomColumnIndexCountRule($this->custom_table, $id),
                     new Validator\CustomColumnUsingIndexRule($id),
                 ])
+                ->attribute(['data-filtertrigger' =>true])
                 ->help(sprintf(exmtrans("custom_column.help.index_enabled"), getManualUrl('column?id='.exmtrans('custom_column.options.index_enabled'))));
+            $form->switchbool('freeword_search', exmtrans("custom_column.options.freeword_search"))
+                ->attribute(['data-filter' => json_encode(['parent' => 1, 'key' => 'options_index_enabled', 'value' => '1'])])
+                ->help(exmtrans("custom_column.help.freeword_search"));
             $form->switchbool('unique', exmtrans("custom_column.options.unique"))
                 ->help(exmtrans("custom_column.help.unique"));
             $form->switchbool('init_only', exmtrans("custom_column.options.init_only"))
@@ -231,7 +267,8 @@ class CustomColumnController extends AdminControllerTableBase
             $form->switchbool('login_user_default', exmtrans("custom_column.options.login_user_default"))
                 ->attribute(['data-filter' => json_encode(['parent' => 1, 'key' => 'column_type', 'value' => [ColumnType::USER]])])
                 ->help(exmtrans("custom_column.help.login_user_default"));
-            $form->text('placeholder', exmtrans("custom_column.options.placeholder"));
+            $form->text('placeholder', exmtrans("custom_column.options.placeholder"))
+                ->help(exmtrans("custom_column.help.placeholder"));
             $form->text('help', exmtrans("custom_column.options.help"))->help(exmtrans("custom_column.help.help"));
             
             $form->text('min_width', exmtrans("custom_column.options.min_width"))
@@ -416,7 +453,14 @@ class CustomColumnController extends AdminControllerTableBase
                 ->help(exmtrans("custom_column.help.select_load_ajax", config('exment.select_table_limit_count', 100)))
                 ->default("0")
                 ->attribute(['data-filter' => json_encode(['parent' => 1, 'key' => 'column_type', 'value' => ColumnType::COLUMN_TYPE_SELECT_TABLE()])]);
-            
+
+            // user organization
+            $form->switchbool('showing_all_user_organizations', exmtrans("custom_column.options.showing_all_user_organizations"))
+                ->attribute(['data-filter' => json_encode(['parent' => 1, 'key' => 'column_type', 'value' => ColumnType::COLUMN_TYPE_USER_ORGANIZATION()])])
+                ->help(exmtrans("custom_column.help.showing_all_user_organizations"))
+                ->default('0');
+
+
             // yes/no ----------------------------
             $form->text('true_value', exmtrans("custom_column.options.true_value"))
                     ->help(exmtrans("custom_column.help.true_value"))
@@ -495,6 +539,7 @@ class CustomColumnController extends AdminControllerTableBase
             // image, file, select
             // enable multiple
             $form->switchbool('multiple_enabled', exmtrans("custom_column.options.multiple_enabled"))
+                ->help(exmtrans("custom_column.help.multiple_enabled"))
                 ->attribute(['data-filter' => json_encode(['parent' => 1, 'key' => 'column_type', 'value' => ColumnType::COLUMN_TYPE_MULTIPLE_ENABLED()])]);
         })->disableHeader();
 
@@ -503,34 +548,35 @@ class CustomColumnController extends AdminControllerTableBase
 
         // if create column, add custom form and view
         if (!isset($id)) {
+            $form->exmheader(exmtrans('common.create_only_setting'))->hr();
+
             $form->switchbool('add_custom_form_flg', exmtrans("custom_column.add_custom_form_flg"))->help(exmtrans("custom_column.help.add_custom_form_flg"))
                 ->default("1")
-                ->attribute(['data-filtertrigger' =>true])
             ;
             $form->switchbool('add_custom_view_flg', exmtrans("custom_column.add_custom_view_flg"))->help(exmtrans("custom_column.help.add_custom_view_flg"))
                 ->default("0")
-                ->attribute(['data-filtertrigger' =>true])
+            ;
+            $form->switchbool('add_table_label_flg', exmtrans("custom_column.add_table_label_flg"))->help(exmtrans("custom_column.help.add_table_label_flg"))
+                ->default("0")
             ;
             $form->ignore('add_custom_form_flg');
             $form->ignore('add_custom_view_flg');
+            $form->ignore('add_table_label_flg');
         }
 
         $form->saved(function (Form $form) {
-            // create or drop index --------------------------------------------------
             $model = $form->model();
-            $model->alterColumn();
-
             $this->addColumnAfterSaved($model);
         });
 
         $form->disableCreatingCheck(false);
         $form->disableEditingCheck(false);
         $custom_table = $this->custom_table;
-        $form->tools(function (Form\Tools $tools) use ($id, $form, $custom_table) {
+        $form->tools(function (Form\Tools $tools) use ($id, $custom_table) {
             if (isset($id) && boolval(CustomColumn::getEloquent($id)->disabled_delete)) {
                 $tools->disableDelete();
             }
-            $tools->add((new Tools\CustomTableMenuButton('column', $custom_table, false))->render());
+            $tools->add(new Tools\CustomTableMenuButton('column', $custom_table));
         });
         return $form;
     }
@@ -675,21 +721,37 @@ class CustomColumnController extends AdminControllerTableBase
 
             $custom_view_column->save();
         }
+
+        
+        // set table labels --------------------------------------------------
+        $add_table_label_flg = app('request')->input('add_table_label_flg');
+        if (boolval($add_table_label_flg)) {
+            $priority = CustomColumnMulti::where('custom_table_id', $this->custom_table->id)->where('multisetting_type', MultisettingType::TABLE_LABELS)->max('priority') ?? 0;
+            
+            CustomColumnMulti::create([
+                'custom_table_id' => $this->custom_table->id,
+                'multisetting_type' => MultisettingType::TABLE_LABELS,
+                'priority' => ++$priority,
+                'options' => [
+                    'table_label_id' => $model->id,
+                ],
+            ]);
+        }
     }
 
     /**
      * Get column options for calc
      *
-     * @param [type] $id
-     * @param [type] $custom_table
-     * @return void
+     * @param string|int|null $id
+     * @param CustomTable $custom_table
+     * @return array
      */
     protected function getCalcCustomColumnOptions($id, $custom_table)
     {
         $options = [];
 
         // get calc options
-        $custom_table->custom_columns->filter(function ($column) use ($id) {
+        $custom_table->custom_columns_cache->filter(function ($column) use ($id) {
             if (isset($id) && $id == array_get($column, 'id')) {
                 return false;
             }
@@ -708,7 +770,7 @@ class CustomColumnController extends AdminControllerTableBase
         
         // get select table custom columns
         $select_table_custom_columns = [];
-        $custom_table->custom_columns->each(function ($column) use ($id, &$options) {
+        $custom_table->custom_columns_cache->each(function ($column) use ($id, &$options) {
             if (isset($id) && $id == array_get($column, 'id')) {
                 return;
             }
@@ -717,7 +779,7 @@ class CustomColumnController extends AdminControllerTableBase
             }
 
             // get select table's calc column
-            $column->select_target_table->custom_columns->filter(function ($select_target_column) use ($id, $column, &$options) {
+            $column->select_target_table->custom_columns_cache->filter(function ($select_target_column) use ($id) {
                 if (isset($id) && $id == array_get($select_target_column, 'id')) {
                     return false;
                 }
@@ -748,7 +810,7 @@ class CustomColumnController extends AdminControllerTableBase
                     'custom_table_id' => $child_table->id
                 ];
 
-                $child_columns = $child_table->custom_columns->filter(function ($column) {
+                $child_columns = $child_table->custom_columns_cache->filter(function ($column) {
                     return in_array(array_get($column, 'column_type'), ColumnType::COLUMN_TYPE_CALC());
                 })->map(function ($column) use ($child_table_name) {
                     return [
@@ -768,7 +830,7 @@ class CustomColumnController extends AdminControllerTableBase
     /**
      * Get import export select list
      *
-     * @return void
+     * @return array
      */
     protected function getImportExportColumnSelect($select_table, $form, $id, $isImport = true)
     {

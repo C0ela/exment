@@ -11,6 +11,7 @@ use Exceedone\Exment\Model\Plugin;
 use Exceedone\Exment\Enums\ApiScope;
 use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Enums\PluginType;
+use Exceedone\Exment\Services\Plugin\PluginPageBase;
 
 class PluginServiceProvider extends ServiceProvider
 {
@@ -48,8 +49,8 @@ class PluginServiceProvider extends ServiceProvider
     /**
      * routing plugin
      *
-     * @param Plugin $plugin
-     * @param json $json
+     * @param string $plugin_type
+     * @param PluginPageBase $pluginPage
      * @return void
      */
     protected function pluginRoute($plugin_type, $pluginPage)
@@ -73,6 +74,8 @@ class PluginServiceProvider extends ServiceProvider
             return;
         }
 
+        $prefix = null;
+        $defaultFunction = null;
         switch ($plugin_type) {
             case PluginType::PAGE:
                 $prefix = $pluginPage->getRouteUri();
@@ -95,8 +98,8 @@ class PluginServiceProvider extends ServiceProvider
             Route::group([
                 'prefix'        => url_join(config('admin.route.prefix'), $p),
                 'namespace'     => 'Exceedone\Exment\Services\Plugin',
-                'middleware'    => $isApi ? ['api', 'adminapi', 'pluginapi'] : config('admin.route.middleware'),
-            ], function (Router $router) use ($plugin, $plugin_type, $pluginPage, $isApi, $defaultFunction, $json) {
+                'middleware'    => $isApi ? ['api', 'adminapi', 'pluginapi'] : ['adminweb', 'admin'],
+            ], function (Router $router) use ($plugin, $isApi, $defaultFunction, $json) {
                 $routes = array_get($json, 'route', []);
     
                 // if not has index endpoint, set.
@@ -135,7 +138,7 @@ class PluginServiceProvider extends ServiceProvider
     /**
      * Check route has index.
      *
-     * @param [type] $routes
+     * @param array $routes
      * @return boolean
      */
     protected function hasPluginRouteIndex($routes)
@@ -172,8 +175,7 @@ class PluginServiceProvider extends ServiceProvider
     /**
      * routing plugin
      *
-     * @param Plugin $plugin
-     * @param json $json
+     * @param PluginPageBase $pluginScriptStyle
      * @return void
      */
     protected function pluginScriptStyleRoute($pluginScriptStyle)
@@ -185,8 +187,8 @@ class PluginServiceProvider extends ServiceProvider
         Route::group([
             'prefix'        => url_join(config('admin.route.prefix'), $pluginScriptStyle->_plugin()->getRouteUri()),
             'namespace'     => 'Exceedone\Exment\Services\Plugin',
-            'middleware'    => ['web', 'admin_plugin_public'],
-        ], function (Router $router) use ($pluginScriptStyle) {
+            'middleware'    => ['adminweb', 'admin_plugin_public'],
+        ], function (Router $router) {
             // for public file
             Route::get('public/{arg1?}/{arg2?}/{arg3?}/{arg4?}/{arg5?}', 'PluginPageController@_readPublicFile');
         });

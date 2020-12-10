@@ -10,16 +10,13 @@ use Exceedone\Exment\Model\CustomValue;
 use Exceedone\Exment\Model\ModelBase;
 use Exceedone\Exment\Model\LoginUser;
 use Exceedone\Exment\Enums\SystemTableName;
-use Exceedone\Exment\Enums\SystemVersion;
 use Exceedone\Exment\Enums\CurrencySymbol;
 use Exceedone\Exment\Enums\ErrorCode;
-use Exceedone\Exment\Validator as ExmentValidator;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
 use Webpatser\Uuid\Uuid;
 use Carbon\Carbon;
+use Mews\Purifier\Facades\Purifier;
 
 if (!function_exists('exmDebugLog')) {
     /**
@@ -53,16 +50,10 @@ if (!function_exists('exmtrans')) {
 if (!function_exists('getManualUrl')) {
     function getManualUrl($uri = null)
     {
-        $manual_url_base = config('exment.manual_url');
-        ;
-        // if ja, set
-        if (config('app.locale') == 'ja') {
-            $manual_url_base = url_join($manual_url_base, 'ja') . '/';
-        }
-        $manual_url_base = url_join($manual_url_base, $uri);
-        return $manual_url_base;
+        return \Exment::getManualUrl($uri);
     }
 }
+
 if (!function_exists('mbTrim')) {
     function mbTrim($pString)
     {
@@ -86,79 +77,55 @@ if (!function_exists('esc_html')) {
 if (!function_exists('esc_script_tag')) {
     /**
      * escape only script tag
+     *
+     * @deprecated Please use html_clean
      */
     function esc_script_tag($html)
+    {
+        return html_clean($html);
+    }
+}
+
+if (!function_exists('html_clean')) {
+    /**
+     * clean html with HTML Purifier
+     */
+    function html_clean($html)
     {
         if (is_nullorempty($html)) {
             return $html;
         }
         
         try {
-            libxml_use_internal_errors(true);
+            // default setting for exment
+            $config = HTMLPurifier_Config::createDefault();
+            $config->set('HTML.Allowed', Define::HTML_ALLOWED_DEFAULT);
+            $config->set('HTML.AllowedAttributes', Define::HTML_ALLOWED_ATTRIBUTES_DEFAULT);
+            $config->set('CSS.AllowedProperties', Define::CSS_ALLOWED_PROPERTIES_DEFAULT);
 
-            $dom = new \DOMDocument();
-    
-            $dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-    
-            $script = $dom->getElementsByTagName('script');
-    
-            $remove = [];
-            foreach ($script as $item) {
-                $remove[] = $item;
+            // override exment setting
+            if (!is_null($c = config('exment.html_allowed'))) {
+                $config->set('HTML.Allowed', $c);
             }
-    
-            foreach ($remove as $item) {
-                $item->parentNode->removeChild($item);
+            if (!is_null($c = config('exment.html_allowed_attributes'))) {
+                $config->set('HTML.AllowedAttributes', $c);
             }
-    
-            $html = trim($dom->saveHTML());
-            $html = preg_replace('/^<br>/u', '', $html);
-            $html = preg_replace('/<br>$/u', '', $html);
-            
-            libxml_use_internal_errors(false);
+            if (!is_null($c = config('exment.css_allowed_properties'))) {
+                $config->set('CSS.AllowedProperties', $c);
+            }
+
+            return Purifier::clean($html, $config);
         } catch (\Exception $ex) {
-            return $html;
+            return null;
         }
-        
-        return $html;
-    }
-}
-
-if (!function_exists('esc_sql')) {
-    function esc_sql($string)
-    {
-        return app('db')->getPdo()->quote($string);
-    }
-}
-
-if (!function_exists('esc_sqlTable')) {
-    function esc_sqlTable($string)
-    {
-        return \DB::getQueryGrammar()->wrapTable($string);
-    }
-}
-
-if (!function_exists('formatAttributes')) {
-    /**
-     * Format the field attributes.
-     *
-     * @return string
-     */
-    function formatAttributes($attributes)
-    {
-        $html = [];
-
-        foreach ($attributes as $name => $value) {
-            $html[] = $name.'="'.esc_html($value).'"';
-        }
-
-        return implode(' ', $html);
     }
 }
 
 if (!function_exists('is_nullorempty')) {
     /**
-     * validate string. null is true, "" is true, 0 and "0" is false.
+     * validate string, array, Collection and object.
+     *
+     * @return bool null is true, "" is true, 0 and "0" is false.
      */
     function is_nullorempty($obj)
     {
@@ -184,7 +151,7 @@ if (!function_exists('parseIntN')) {
      * if cannot parse, return null.
      * TODO:common lib
      * @param mixed $str
-     * @return \double|integer|null
+     * @return double|integer|null
      */
     function parseIntN($str)
     {
@@ -206,6 +173,40 @@ if (!function_exists('parseFloat')) {
             return null;
         }
         return floatval(str_replace(",", "", $num));
+    }
+}
+
+
+if (!function_exists('floorDigit')) {
+    /**
+     * Truncate to decimal $digit digit.
+     *
+     * @param int|double|null $num
+     * @param int $digit Decimal digits
+     * @param bool $display Whether to set 0 if the number of decimal places is less than the specified number of digits
+     * @return double|int|string
+     */
+    function floorDigit($num, int $digit, bool $display = false)
+    {
+        if ($digit < 0) {
+            $digit = 0;
+        }
+        $numPointPosition = intval(strpos($num, '.'));
+        
+        // if for display
+        $result = null;
+        if ($numPointPosition === 0) { //$num is an integer
+            $result = $num;
+        } else {
+            $result = floatval(substr($num, 0, $numPointPosition + $digit + 1));
+            ;
+        }
+
+        if ($display && $digit > 0) {
+            $result = sprintf("%.{$digit}f", $result);
+        }
+
+        return $result;
     }
 }
 
@@ -233,6 +234,19 @@ if (!function_exists('rmcomma')) {
         }
         
         return str_replace(",", "", $value);
+    }
+}
+if (!function_exists('trydecrypt')) {
+    /**
+     * decrypt if can, caanot return null
+     */
+    function trydecrypt($value)
+    {
+        try {
+            return isset($value) ? decrypt($value) : null;
+        } catch (\Exception $ex) {
+            return null;
+        }
     }
 }
 
@@ -290,6 +304,26 @@ if (!function_exists('admin_base_paths')) {
     }
 }
 
+if (!function_exists('admin_urls_query')) {
+    /**
+     * Join admin url paths and query. Please set last arg
+     */
+    function admin_urls_query(...$pass_array)
+    {
+        // get last arg
+        $args = func_get_args();
+        $count = count($args);
+        if (count($args) <= 1) {
+            return admin_urls($args);
+        }
+
+        $args = collect($args);
+        $query = $args->last();
+
+        $url = admin_urls(...$args->slice(0, $count - 1)->toArray());
+        return $url . '?' . http_build_query($query);
+    }
+}
 if (!function_exists('namespace_join')) {
     /**
      * Join NameSpace.
@@ -308,6 +342,16 @@ if (!function_exists('path_join')) {
     {
         return join_paths('/', $pass_array);
         //return join_paths(DIRECTORY_SEPARATOR, $pass_array);
+    }
+}
+
+if (!function_exists('path_join_os')) {
+    /**
+     * Join FilePath. consider OS SEPARATOR.
+     */
+    function path_join_os(...$pass_array)
+    {
+        return join_paths(DIRECTORY_SEPARATOR, $pass_array);
     }
 }
 
@@ -500,17 +544,32 @@ if (!function_exists('getUploadMaxFileSize')) {
     }
 }
 
-if (!function_exists('isApiEndpoint')) {
+if (!function_exists('isMatchRequest')) {
     /**
-     * this url is ApiEndpoint
+     * Is match uri from request
+     *
+     * @param array|string $uris
+     * @return boolean
      */
-    function isApiEndpoint()
+    function isMatchRequest($uris = null)
     {
-        $basePath = ltrim(admin_base_path(), '/');
-        return request()->is($basePath . '/api/*') || request()->is($basePath . '/webapi/*');
+        $request = app('request');
+
+        foreach (toArray($uris) as $uri) {
+            $uri = admin_base_path($uri);
+            
+            if ($uri !== '/') {
+                $uri = trim($uri, '/');
+            }
+
+            if ($request->is($uri)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
-
 
 if (!function_exists('deleteDirectory')) {
     /**
@@ -594,7 +653,8 @@ if (!function_exists('array_keys_exists')) {
 if (!function_exists('array_key_value_exists')) {
     /**
      * whether has array_key and array_get
-     * @param mixed $str
+     * @param mixed $key
+     * @param array|\Illuminate\Support\Collection $array
      * @return bool
      */
     function array_key_value_exists($key, $array)
@@ -609,7 +669,7 @@ if (!function_exists('array_key_value_exists')) {
             if (!array_has($array, $k)) {
                 continue;
             }
-            if (!empty(array_get($array, $k))) {
+            if (!is_nullorempty(array_get($array, $k))) {
                 return true;
             }
         }
@@ -668,7 +728,7 @@ if (!function_exists('jsonToArray')) {
     /**
      * json to array
      *
-     * @param mixed $string
+     * @param mixed $value
      * @return array
      */
     function jsonToArray($value)
@@ -691,9 +751,10 @@ if (!function_exists('jsonToArray')) {
 
 if (!function_exists('stringToArray')) {
     /**
-     * string(as comma) to array
+     * string(as comma): to array
+     * Collection : $collect->toArray()
      *
-     * @param mixed $string
+     * @param mixed $value
      * @return array
      */
     function stringToArray($value)
@@ -705,6 +766,10 @@ if (!function_exists('stringToArray')) {
         // convert json to array
         if (is_array($value)) {
             return $value;
+        }
+
+        if ($value instanceof \Illuminate\Support\Collection) {
+            return $value->toArray();
         }
 
         $array = explode(',', $value);
@@ -735,10 +800,40 @@ if (!function_exists('toArray')) {
         }
 
         if ($value instanceof \Illuminate\Support\Collection) {
+            return $value->all();
+        }
+
+        //TODO: I think this should not call $model->toArray()...
+        if ($value instanceof \Illuminate\Database\Eloquent\Model) {
             return $value->toArray();
         }
 
         return (array)$value;
+    }
+}
+
+if (!function_exists('arrayToString')) {
+    /**
+     * array to string(comma) string
+     *
+     * @param mixed $value
+     * @return string
+     */
+    function arrayToString($value)
+    {
+        if (is_null($value)) {
+            return null;
+        }
+        
+        // convert json to array
+        if (is_array($value)) {
+            return implode(',', $value);
+        }
+        if ($value instanceof \Illuminate\Support\Collection) {
+            return $value->implode(',');
+        }
+
+        return (string)$value;
     }
 }
 
@@ -758,9 +853,18 @@ if (!function_exists('is_vector')) {
      * @return boolean
      * true: [0, 1, 2]
      * false: ['foo' => 0, 'bar' => 1]
+     * false: [0 => 'foo', 1 => 'bar']
      */
     function is_vector(array $arr)
     {
+        // foreach($arr as $key => $value){
+        //     if($key !== $value){
+        //         return false;
+        //     }
+        // }
+
+        // return true;
+
         return array_values($arr) === $arr;
     }
 }
@@ -770,7 +874,7 @@ if (!function_exists('is_list')) {
      * is value is array or Collection
      *
      * @param mixed $value
-     * @return array
+     * @return bool
      */
     function is_list($value) : bool
     {
@@ -779,6 +883,54 @@ if (!function_exists('is_list')) {
         }
 
         return is_array($value) || $value instanceof \Illuminate\Support\Collection;
+    }
+}
+
+if (!function_exists('isMatchString')) {
+    /**
+     * isMatch string using strcmp
+     *
+     * @param mixed $v1
+     * @param mixed $v2
+     * @return bool
+     */
+    function isMatchString($v1, $v2) : bool
+    {
+        return strcmp($v1, $v2) == 0;
+    }
+}
+
+if (!function_exists('isMatchDecimal')) {
+    /**
+     * compare decimal number
+     *
+     * @param mixed $v1
+     * @param mixed $v2
+     * @return bool
+     */
+    function isMatchDecimal($v1, $v2) : bool
+    {
+        $v1 = rtrim((strpos($v1, ".") !== false ? rtrim($v1, "0") : $v1), ".");
+        $v2 = rtrim((strpos($v2, ".") !== false ? rtrim($v2, "0") : $v2), ".");
+        return strcmp($v1, $v2) == 0;
+    }
+}
+
+if (!function_exists('isMatchArray')) {
+    /**
+     * compare array
+     *
+     * @param array $v1
+     * @param array $v2
+     * @return bool
+     */
+    function isMatchArray(array $v1, array $v2) : bool
+    {
+        if (count($v1) == count($v2)) {
+            $dup = array_intersect($v1, $v2);
+            return count($v1) == count($dup);
+        }
+        return false;
     }
 }
 
@@ -847,6 +999,13 @@ if (!function_exists('short_uuid')) {
     }
 }
 
+if (!function_exists('is_uuid')) {
+    function is_uuid($uuid) : bool
+    {
+        return Uuid::validate($uuid);
+    }
+}
+
 if (!function_exists('make_licensecode')) {
     function make_licensecode()
     {
@@ -877,34 +1036,7 @@ if (!function_exists('get_password_rule')) {
      */
     function get_password_rule($required = true, ?LoginUser $login_user = null)
     {
-        $validates = [];
-        if ($required) {
-            $validates[] = 'required';
-        } else {
-            $validates[] = 'nullable';
-        }
-        $validates[] = 'confirmed';
-        $validates[] = 'max:'.(!is_null(config('exment.password_rule.max')) ? config('exment.password_rule.max') : '32');
-        
-        // check password policy
-        $complex = false;
-        $validates[] = new ExmentValidator\PasswordHistoryRule($login_user);
-
-        if (!is_null($is_complex = System::complex_password()) && boolval($is_complex)) {
-            $validates[] = new ExmentValidator\ComplexPasswordRule;
-            $complex = true;
-        }
-
-        if (!$complex) {
-            $validates[] = 'min:'.(!is_null(config('exment.password_rule.min')) ? config('exment.password_rule.min') : '8');
-        }
-
-        // set regex
-        if (!$complex && !is_null(config('exment.password_rule.rule'))) {
-            $validates[] = 'regex:/'.config('exment.password_rule.rule').'/';
-        }
-        
-        return $validates;
+        return \Exment::get_password_rule($required, $login_user);
     }
 }
 
@@ -942,6 +1074,17 @@ if (!function_exists('replaceBreak')) {
     }
 }
 
+if (!function_exists('replaceBrTag')) {
+    /**
+     * replace <br /> to new line code
+     * @return string
+     */
+    function replaceBrTag($text)
+    {
+        return preg_replace("/<br *\/>/u", "\n", $text);
+    }
+}
+
 if (!function_exists('explodeBreak')) {
     /**
      * explode new line code
@@ -950,6 +1093,17 @@ if (!function_exists('explodeBreak')) {
     function explodeBreak($text)
     {
         return explode("\r\n", preg_replace("/\\\\r\\\\n|\\\\r|\\\\n|\\r\\n|\\r|\\n/", "\r\n", $text));
+    }
+}
+
+if (!function_exists('getYesNo')) {
+    /**
+     * get yes no label
+     * @return string
+     */
+    function getYesNo($value) : string
+    {
+        return boolval($value) ? 'YES' : 'NO';
     }
 }
 
@@ -1023,7 +1177,7 @@ if (!function_exists('canConnection')) {
         // Use session. Not request session
         return System::cache(Define::SYSTEM_KEY_SESSION_CAN_CONNECTION_DATABASE, function () {
             // get all table names
-            return DB::canConnection();
+            return \ExmentDB::canConnection();
         }, true);
     }
 }
@@ -1069,12 +1223,13 @@ if (!function_exists('getDBTableName')) {
     /**
      * Get database table name.
      * @param string|CustomTable|array $obj
+     * @param bool $isThrow if true and not has database, throwing
      * @return string
      */
-    function getDBTableName($obj)
+    function getDBTableName($obj, $isThrow = true)
     {
         $obj = CustomTable::getEloquent($obj);
-        if (!isset($obj)) {
+        if (!isset($obj) && $isThrow) {
             throw new Exception('table name is not found. please tell system administrator.');
         }
         return 'exm__'.array_get($obj, 'suuid');
@@ -1128,6 +1283,8 @@ if (!function_exists('getCurrencySymbolLabel')) {
 if (!function_exists('replaceTextFromFormat')) {
     /**
      * Replace value from format. ex. ${value:user_name} to user_name's value
+     *
+     * @deprecated Please use ReplaceFormatService::replaceTextFromFormat
      */
     function replaceTextFromFormat($format, $custom_value = null, $options = [])
     {
@@ -1139,36 +1296,26 @@ if (!function_exists('replaceTextFromFormat')) {
 if (!function_exists('shouldPassThrough')) {
     function shouldPassThrough($initialize = false)
     {
-        $request = app('request');
-        
         if ($initialize) {
             $excepts = [
-                admin_base_path('initialize'),
-                admin_base_path('install'),
-                admin_base_path('template/search'),
+                'initialize',
+                'install',
+                'template/search',
             ];
         } else {
             $excepts = [
-                admin_base_path('auth/login'),
-                admin_base_path('auth/logout'),
-                admin_base_path('auth/reset'),
-                admin_base_path('auth/forget'),
-                admin_base_path('initialize'),
-                admin_base_path('template/search'),
+                'auth/login',
+                'auth/logout',
+                'saml/login',
+                'saml/logout',
+                'auth/reset',
+                'auth/forget',
+                'initialize',
+                'template/search',
             ];
         }
 
-        foreach ($excepts as $except) {
-            if ($except !== '/') {
-                $except = trim($except, '/');
-            }
-
-            if ($request->is($except)) {
-                return true;
-            }
-        }
-
-        return false;
+        return isMatchRequest($excepts);
     }
 }
 
@@ -1213,7 +1360,7 @@ if (! function_exists('abortJson')) {
      * @param  \Symfony\Component\HttpFoundation\Response|int     $code
      * @param  string|array|ErrorCode  $message
      * @param  ErrorCode  $errorCode
-     * @return void
+     * @return \Symfony\Component\HttpFoundation\Response
      */
     function abortJson($code, $message = null, $errorCode = null)
     {
@@ -1240,7 +1387,9 @@ if (! function_exists('abortJson')) {
 if (!function_exists('getAjaxResponse')) {
     /**
      * get ajax response.
-     * using plugin, copy, data import/export
+     * using plugin, copy, data import/
+     *
+     * @return \Symfony\Component\HttpFoundation\Response Response for ajax json
      */
     function getAjaxResponse($results)
     {
@@ -1256,9 +1405,10 @@ if (!function_exists('getAjaxResponse')) {
             'swal' => null,
             'swaltext' => null,
             'errors' => [],
+            'pjaxmodal' => false,
         ], $results);
 
-        if(isset($results['swaltext']) && !isset($results['swal'])){
+        if (isset($results['swaltext']) && !isset($results['swal'])) {
             $results['swal'] = $results['result'] === true ? exmtrans('common.success') : exmtrans('common.error');
         }
 
@@ -1296,150 +1446,6 @@ if (!function_exists('downloadFile')) {
     }
 }
 
-
-if (!function_exists('getExmentVersion')) {
-    /**
-     * getExmentVersion using session and composer
-     *
-     * @return array $latest: new version in package, $current: this version in server
-     */
-    function getExmentVersion($getFromComposer = true)
-    {
-        try {
-            try {
-                $version_json = app('request')->session()->get(Define::SYSTEM_KEY_SESSION_SYSTEM_VERSION);
-            } catch (\Exception $e) {
-            }
-    
-            if (isset($version_json)) {
-                $version = json_decode($version_json, true);
-                $latest = array_get($version, 'latest');
-                $current = array_get($version, 'current');
-            }
-            
-            if ((empty($latest) || empty($current))) {
-                // get current version from composer.lock
-                $composer_lock = base_path('composer.lock');
-                if (!\File::exists($composer_lock)) {
-                    return [null, null];
-                }
-
-                $contents = \File::get($composer_lock);
-                $json = json_decode($contents, true);
-                if (!$json) {
-                    return [null, null];
-                }
-                
-                // get exment info
-                $packages = array_get($json, 'packages');
-                $exment = collect($packages)->filter(function ($package) {
-                    return array_get($package, 'name') == Define::COMPOSER_PACKAGE_NAME;
-                })->first();
-                if (!isset($exment)) {
-                    return [null, null];
-                }
-                $current = array_get($exment, 'version');
-                
-                // if outside api is not permitted, return only current
-                if (!System::outside_api() || !$getFromComposer) {
-                    return [null, $current];
-                }
-
-                // if already executed
-                if (session()->has(Define::SYSTEM_KEY_SESSION_SYSTEM_VERSION_EXECUTE)) {
-                    return [null, $current];
-                }
-
-                //// get latest version
-                $client = new \GuzzleHttp\Client();
-                $response = $client->request('GET', Define::COMPOSER_VERSION_CHECK_URL, [
-                    'http_errors' => false,
-                    'timeout' => 3, // Response timeout
-                    'connect_timeout' => 3, // Connection timeout
-                ]);
-
-                session([Define::SYSTEM_KEY_SESSION_SYSTEM_VERSION_EXECUTE => true]);
-
-                $contents = $response->getBody()->getContents();
-                if ($response->getStatusCode() != 200) {
-                    return [null, null];
-                }
-
-                $json = json_decode($contents, true);
-                if (!$json) {
-                    return [null, null];
-                }
-                $packages = array_get($json, 'packages.'.Define::COMPOSER_PACKAGE_NAME);
-                if (!$packages) {
-                    return [null, null];
-                }
-
-                // sort by timestamp
-                $sortedPackages = collect($packages)->sortByDesc('time');
-                foreach ($sortedPackages as $key => $package) {
-                    // if version is "dev-", continue
-                    if (substr($key, 0, 4) == 'dev-') {
-                        continue;
-                    }
-                    $latest = $key;
-                    break;
-                }
-                
-                try {
-                    session()->put(Define::SYSTEM_KEY_SESSION_SYSTEM_VERSION, json_encode([
-                        'latest' => $latest, 'current' => $current
-                    ]));
-                } catch (\Exception $e) {
-                }
-            }
-        } catch (\Exception $e) {
-            session([Define::SYSTEM_KEY_SESSION_SYSTEM_VERSION_EXECUTE => true]);
-        }
-        
-        return [$latest ?? null, $current ?? null];
-    }
-}
-
-
-if (!function_exists('getExmentCurrentVersion')) {
-    /**
-     * getExmentCurrentVersion
-     *
-     * @return string this version in server
-     */
-    function getExmentCurrentVersion()
-    {
-        return getExmentVersion(false)[1];
-    }
-}
-
-if (!function_exists('checkLatestVersion')) {
-    /**
-     * check exment's next version
-     *
-     * @return array $latest: new version in package, $current: this version in server
-     */
-    function checkLatestVersion()
-    {
-        list($latest, $current) = getExmentVersion();
-        $latest = trim($latest, 'v');
-        $current = trim($current, 'v');
-        
-        if (empty($latest) || empty($current)) {
-            return SystemVersion::ERROR;
-        } elseif (strpos($current, 'dev-') === 0) {
-            return SystemVersion::DEV;
-        } elseif ($latest === $current) {
-            return SystemVersion::LATEST;
-            $message = exmtrans("system.version_latest");
-            $icon = 'check-square';
-            $bgColor = 'blue';
-        } else {
-            return SystemVersion::HAS_NEXT;
-        }
-    }
-}
-
 if (!function_exists('getPagerOptions')) {
     /**
      * get pager select options
@@ -1458,19 +1464,6 @@ if (!function_exists('getPagerOptions')) {
     }
 }
 
-if (!function_exists('getTrueMark')) {
-    /**
-     * get true mark. If $val is true, output mark
-     */
-    function getTrueMark($val)
-    {
-        if (!boolval($val)) {
-            return null;
-        }
-
-        return config('exment.true_mark', '<i class="fa fa-check"></i>');
-    }
-}
 
 // Excel --------------------------------------------------
 if (!function_exists('getDataFromSheet')) {
@@ -1479,38 +1472,7 @@ if (!function_exists('getDataFromSheet')) {
      */
     function getDataFromSheet($sheet, $skip_excel_row_no = 0, $keyvalue = false, $isGetMerge = false)
     {
-        $data = [];
-        foreach ($sheet->getRowIterator() as $row_no => $row) {
-            // if index < $skip_excel_row_no, conitnue
-            if ($row_no <= $skip_excel_row_no) {
-                continue;
-            }
-
-            $cellIterator = $row->getCellIterator();
-            $cellIterator->setIterateOnlyExistingCells(false); // This loops through all cells,
-            $cells = [];
-            foreach ($cellIterator as $column_no => $cell) {
-                $value = getCellValue($cell, $sheet, $isGetMerge);
-
-                // if keyvalue, set array as key value
-                if ($keyvalue) {
-                    $key = getCellValue($column_no."1", $sheet, $isGetMerge);
-                    $cells[$key] = mbTrim($value);
-                }
-                // if false, set as array
-                else {
-                    $cells[] = mbTrim($value);
-                }
-            }
-            if (collect($cells)->filter(function ($v) {
-                return !is_nullorempty($v);
-            })->count() == 0) {
-                break;
-            }
-            $data[] = $cells;
-        }
-
-        return $data;
+        return \Exment::getDataFromSheet($sheet, $skip_excel_row_no, $keyvalue, $isGetMerge);
     }
 }
 
@@ -1602,43 +1564,27 @@ if (!function_exists('getUserName')) {
     }
 }
 
-if (!function_exists('useLoginProvider')) {
+if (!function_exists('admin_exclusion_path')) {
     /**
-     * use login provider
+     * Get admin exclusion url.
+     * Ex. admin/data/testtable to data/testtable
+     *
+     * @param string $path
+     *
+     * @return string
      */
-    function useLoginProvider()
+    function admin_exclusion_path($path = '')
     {
-        $config = config('exment.login_providers');
-        if (is_nullorempty($config)) {
-            return false;
-        } elseif (is_array($config)) {
-            return (count($config) > 0);
-        } else {
-            return true;
+        $path = trim($path, '/');
+
+        $prefix = trim(config('admin.route.prefix'), '/');
+
+        if (starts_with($path, $prefix)) {
+            $path = substr($path, strlen($prefix));
         }
-    }
 
-    if (!function_exists('admin_exclusion_path')) {
-        /**
-         * Get admin exclusion url.
-         *
-         * @param string $path
-         *
-         * @return string
-         */
-        function admin_exclusion_path($path = '')
-        {
-            $path = trim($path, '/');
+        $path = trim($path, '/');
 
-            $prefix = trim(config('admin.route.prefix'), '/');
-
-            if (starts_with($path, $prefix)) {
-                $path = substr($path, strlen($prefix));
-            }
-
-            $path = trim($path, '/');
-    
-            return $path?? '/';
-        }
+        return $path?? '/';
     }
 }

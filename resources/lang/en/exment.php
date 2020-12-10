@@ -15,10 +15,13 @@ return [
         'default' => 'Default',
         'basic_setting' => 'Basic Setting',
         'detail_setting' => 'Detail Setting',
+        'execute_result' => 'Execute Result',
         'no_setting' => 'No Setting',
         'input' => 'Input',
         'available_true' => 'Available',
         'available_false' => 'Not Available',
+        'activate' => 'Activate',
+        'deactivate' => 'Deactivate',
         'help_code' => "Cannot edit after save. Please enter lowercase letters, numbers, '-' or '_'. Cannot use other data's value.",
         'id' => 'ID',
         'suuid' => 'System ID(20-length)',
@@ -52,6 +55,10 @@ return [
         'column' => 'Column',
         'row_up' => 'Row Up',
         'row_down' => 'Row Down',
+        'open' => 'Open',
+        'open_blank' => 'Open Blank',
+        'open_all' => 'Open All',
+        'close_all' => 'Close All',
         'pager_count' => 'Pager Count',
         'system' => 'System',
         'custom_table' => 'Custom Table',
@@ -66,6 +73,8 @@ return [
         'join_and' => 'And',
         'join_or' => 'Or',
         'download' => 'Download',
+        'append_to_selectitem' => 'Append',
+        'redirect_to' => 'Move to %s',
 
         'message' => [
             'confirm_execute' => 'Are you sure to %s ?',
@@ -76,11 +85,14 @@ return [
             'import_success' => 'Success Import!',
             'import_error' => 'Success Error. Please Check Error Message.',
             'notfound' => 'Data Not Found.',
+            'notfound_or_deny' => 'Data Not Found or Not Permission.',
             'wrongdata' => 'Data is wrong. Please check url.',
             'wrongconfig' => 'Wrong config.json.',
             'exists_row' => 'Be sure to enter at least one line of %s.',
             'sendmail_succeeded' => 'E-mail transmission succeeded.',
             'input_keyword' => 'Please input "%s".',
+            'no_permission' => '(No Permission)',
+            'file_drag_drop' => 'Drag & drop files here …',
         ],
 
         'help' =>[
@@ -117,10 +129,12 @@ return [
     ],
 
     'error' => [
+        'undefined_error' => 'Undefined Error.',
         'header' => 'An error occurred',
         'description' => 'An error has occurred. Please check the content of the error.',
         'error_message' => 'Error Message',
         'error_trace' => 'Error Trace',
+        'delete_failed' => 'Delete failed. Please check the error log file.',
         'failure_import_file' => 'The format of the uploaded file is incorrect. Please check the file.',
         'import_max_row_count' => 'Up to :count data items can be imported at one time. Please divide and upload.',
         'not_install' => 'Exment is not installed. Please install Exment according to the following URL. <br /> https://exment.net/docs/#/quickstart',
@@ -135,6 +149,7 @@ return [
         'ie_not_supported' => 'Exment cannot be used with Internet Explorer.',
         'support_browser' => 'Support Browser',
         'ip_address_filtered' => 'Unauthorized IP address.',
+        'not_contains_column' => 'Some items are not set in the custom column.',
     ],
 
     'install' => [
@@ -161,10 +176,12 @@ return [
         ],
 
         'error' => [
+            'cannot_write_env' => 'Failed to write the setting file. Please check if you have write permission or if the file is not open.',
             'database_canconnection' => 'Could not connect to the database. Please check your settings.',
-            'not_require_database_version' => ':database requires at least version :min. The version used is :current.',
             'mistake_mysql_mariadb' => 'The database you are using is :database, but you have selected :database_select. Please check the settings.',
             'not_require_php_version' => 'The PHP you are using is :current, but you have selected :min or more and less than :max. Please check the settings.',
+            'not_require_database_version_min' => ':database requires at least version :min. The version used is :current.',
+            'not_require_database_version_min_maxlt' => ':database requires at least version :min and less than :max_lt. The version used is :current.',
         ],
     ],
 
@@ -221,10 +238,15 @@ return [
         'system_mail_password' => 'Password',
         'system_mail_encryption' => 'Encryption Format',
         'system_mail_from' => 'System Email',
+        'system_mail_body_type' => 'Mail Body Type',
         'test_mail_to' => 'TestMail Send To',
         'submit_test_mail' => 'Send TestMail',
+        'system_slack' => 'Slack Setting',
+        'system_slack_user_column' => 'Slack ID Setting Column(User)',
         'grid_pager_count' => 'Number of displayed data list',
         'datalist_pager_count' => 'Number of displayed search and dashboard',
+        'userdashboard_available' => 'Use User Dashboard',
+        'userview_available' => 'Use User View',
         'template' => 'Install Template',
         'version_header' => 'System version infomation',
         'version_progress' => 'Checking system version...',
@@ -236,11 +258,19 @@ return [
         'current_version' => 'Current version : ',
         'password_policy' => 'Password Policy',
         'complex_password' => 'Complex Password',
+        'first_change_password' => 'Change Password at First Login',
         'password_expiration_days' => 'Password Expiration Days',
         'password_history_cnt' => 'Number of Password History',
+        'login_page_view' => 'Login Page Setting',
+        'login_background_color' => 'Background Color',
+        'login_page_image' => 'Background Image',
+        'login_page_image_type' => 'Background Image Type',
+        'view_dashboard_header' => 'View/Dashboard Setting',
         'organization_header' => 'Organization Setting',
         'org_joined_type_role_group' => 'Organization Tree Setting(Role Group)',
         'org_joined_type_custom_value' => 'Organization Tree Setting(Data)',
+        'filter_multi_orguser' => 'User Organization Filter',
+        'filter_multi_user' => 'User Filter',
         'custom_value_save_autoshare' => 'Data Share Setting',
         'ip_filter' => 'IP Filter Setting',
         'web_ip_filters' => 'Web Page',
@@ -283,18 +313,49 @@ return [
             'format_local' => ['d/m/Y', 'd/m/Y H:i:s', 'H:i:s'],
         ],
         
-        'joined_org_filter_options' => [
+        'joined_org_filter_role_group_options' => [
             'all' => 'Include parent/child hierarchies of your organization',
             'only_upper' => 'Include parent hierarchy of your organization ',
             'only_downer' => 'Include child hierarchy of your organization',
             'only_join' => 'Only your organization',
         ],
           
+        'joined_org_filter_custom_value_options' => [
+            'all' => 'Include parent/child hierarchies of your organization',
+            'only_upper' => 'Include parent hierarchy of your organization ',
+            'only_downer' => 'Include child hierarchy of your organization',
+            'only_join' => 'Only your organization',
+        ],
+          
+        'filter_multi_orguser_options' => [
+            'not_filter' => 'Not filter',
+            'all' => 'Organization to which the logged-in user belongs and organization of parent-child hierarchy. And, the users to which they belong',
+            'only_upper' => 'Organization to which the logged-in user belongs and organization of parent hierarchy. And, the users to which they belong',
+            'only_downer' => 'Organization to which the logged-in user belongs and organization of child hierarchy. And, the users to which they belong',
+            'only_join' => 'Organization to which the logged-in user belongs. And, the users to which they belong',
+        ],
+
+        'filter_multi_user_options' => [
+            'not_filter' => 'Not filter',
+            'only_join' => 'Only login user',
+        ],
+
         'custom_value_save_autoshare_options' => [
             'user_only' => 'Only login user',
             'user_organization' => 'Login user and your organization',
+            'user_organizationview' => 'Login user and your organization(VIEW ONLY)',
         ],
 
+        'login_page_image_type_options' => [
+            "repeat" => "Repeat",
+            "cover" => "Display image size fix to page",
+        ],
+        
+        'system_mail_body_type_options' => [
+            "html" => "HTML",
+            "plain" => "Text",
+        ],
+        
         'help' =>[
             'site_name' => 'The site name displayed in the upper left of the page.',
             'site_name_short' => 'An abbreviation for the site name to be displayed when the menu is collapsed.',
@@ -315,16 +376,25 @@ return [
             'system_mail' => 'Configure settings when sending mail from the system.',
             'system_mail_from' => 'the mail address from this system. Using this mail address as "from", this system sends users.',
             'system_mail_encryption' => 'Enter the mail encryption protocol format in lower case. (ssl, tls etc)',
+            'system_mail_body_type' => 'Please select the type of body of the email you want to send.',
             'test_mail' => 'Send a test email to the destination you entered. <br /> <b>*Be sure to save the above email settings before executing. The settings during input are invalid. </b>',
+            'system_slack_user_column' => 'Select a custom column in your user table to set your Slack ID. Mentions can be added to the user ID when Slack notification is executed.',
             'template' => 'If select these templates, install tables, columns and forms.',
             'role_one_user_organization' => 'Please register one or more users or organizations for permission.',
+            'userdashboard_available' => 'If set to YES, the user dashboard function will be used, which allows logged-in users to create their own dashboards.',
+            'userview_available' => 'If set to YES, the user view function will be used so that the logged-in user can create their own view.',
             'default_date_format' => 'Sets the display format for the date and time.',
             'password_policy' => 'Set the login password policy.',
             'complex_password' => 'If set to YES, the password must be at least 12 characters long and must include three types of characters (uppercase letters, lowercase letters, numbers, and symbols).',
             'password_expiration_days' => 'Set the password validity period. If set to 0, it will be indefinite.',
+            'first_change_password' => 'If set to YES, the screen to change the password will be displayed when the user logs in for the first time.',
+            'login_background_color' => 'Set the background color of the login screen.',
+            'login_page_image' => 'Set the background image on the login screen.',
+            'login_page_image_type' => 'Select how to display the background image of the login screen.',
             'password_history_cnt' => 'If you enter 1 or more, old passwords that have been used in the past cannot be registered again for the number of entered passwords. <br />*Even if set to 0, the password being set cannot be registered.',
             'org_joined_type_role_group' => 'When an organization is set in "User / Organization Settings" of the role group, set the range to include the parent/child hierarchy organization.',
             'org_joined_type_custom_value' => 'When the organization is set in the sharing settings for each custom data, set the scope to include the organization of the parent-child hierarchy.',
+            'filter_multi_orguser' => 'Set the range where the logged-in user can view other users/organizations. * Set this when you do not want to display other user information such as portal sites that are used across multiple companies.',
             'custom_value_save_autoshare' => 'Set the automatic sharing method when users create new custom data. The default is only the logged-in user, and it can be shared with your organization depending on the setting.',
             'ip_filter' => 'Set the IP address to allow communication. Fixed IP (example: 12.3.5.6) and range specification format (example: 123.4.5.0/24) can be used. If it is not set, all IP addresses are allowed. <br /> If you want to set more than one, please separate them with line breaks.',
         ],
@@ -420,6 +490,8 @@ return [
         'active_flg' => 'Active Flg',
         'select_plugin_file' => 'Select Plugin File',
         'show_plugin_page' => 'Show Plugin Page',
+        'edit_plugin' => 'Edit Plugin',
+        'execute_plugin_batch' => 'Execute',
         'options' => [
             'header' => 'Option Setting',
             'custom_options_header' => 'Custom Options',
@@ -490,6 +562,25 @@ return [
         ],
     ],
 
+    'plugincode' => [
+        'header' => 'Edit Plugin',
+        'upload_header' => 'Upload Files',
+        'description' => 'You can directly edit installed plugins.',
+        'error' => [
+            'folder_notfound' => 'No folder is selected.',
+            'plugin_notfound' => 'The plugin does not exist.',
+            'file_notfound' => 'The plugin file may have been deleted. Please contact your system administrator.',
+        ],
+        'message' => [
+            'file_edit' => 'To edit the file, click the file name in the tree on the right.',
+            'select_file' => 'Please select target file.',
+            'irregular_ext' => 'This is a type of file that cannot be edited.',
+            'irregular_enc' => 'Only the UTF-8 character code is supported.',
+            'upload_file' => 'You can upload files to the selected folder (%s).',
+            'force_updated' => 'If a file with the same name exists in the folder, it will be overwritten. Please be careful.',
+        ],
+    ],
+
     'backup' => [
         'header' => 'Backup List',
         'setting_header' => 'Backup Setting',
@@ -498,6 +589,7 @@ return [
         'file_size' => 'File Size',
         'backup' => 'Backup',
         'restore' => 'Restore',
+        'restore_caution' => 'Caution',
         'download' => 'Download',
         'restore_upload' => 'File Upload',
         'backuprestore' => 'Backup/Restore',
@@ -506,7 +598,9 @@ return [
         'automatic_term' => 'Auto Backup Execution Interval(day)',
         'automatic_hour' => 'Auto Backup Start Time(hour)',
         'history_files' => 'Number of preservation generations',
+        'restore_zipfile' => 'Restore file',
         'upload_zipfile' => 'Upload(zip)',
+        'filesize_over' => 'If the file size is too large to upload',
         'backup_target_options' => [
             'database' => 'Database',
             'plugin' => 'Plugin File',
@@ -525,9 +619,16 @@ return [
             'restore_error' => 'Restore failed.',
             'restore_file_success' => 'Restore success. Redirect to login page.',
             'restore_file_error' => 'Restore failed. Please check upload file.',
+            'edit_filename_confirm' => 'Edit File Name',
+            'edit_filename_text' => 'Enter the file name of the backup file. Some of the characters cannot be used.',
+            'same_filename' => 'A backup file with that file name has already been created.',
+            'notfound_file' => 'Not found the file.',
+            'restore_caution' => 'When migrating to another environment, problems may occur due to the difference between the original environment and the destination environment.<br>In particular, if the OS is different (Windows or Linux), the type of database (MySQL or MariaDB), the version, etc., it will not be completed normally due to various factors.<br>Be sure to check in advance.',
+            'cmd_check_error' => 'The following command did not complete successfully. Please double check the server settings and database settings.  :cmd',
+            'not_support_driver' => 'Currently, %s does not support backup / restore. Please note.',
         ],
         'help' =>[
-            'file_name' => 'Please select the backup zip file.',
+            'file_name' => 'Please select the backup zip file.%s<br>*Up to the size listed can be uploaded from the screen. If you want to restore larger files, please refer to <a href="%s" target="_blank">here <i class="fa fa-external-link"></i></a>.',
             'import_error_message' => 'If incomplete files are incomplete, an error message is displayed in this item.',
             'backup_target' => 'The target of backup. Unless there is a particular reason, we recommend checking all items.',
             'enable_automatic' => 'If it is set to YES, backup will be executed automatically.',
@@ -544,6 +645,7 @@ return [
         'user_name' => 'User Name',
         'email' => 'Email',
         'password' => 'Password',
+        'id' => 'ID',
         'password_confirmation' => 'Password(Confirm)',
         'current_password' => 'Current Password',
         'new_password' => 'New Password',
@@ -554,6 +656,7 @@ return [
         'use_loginuser' => 'Login Authorization Granted',
         'reset_password' => 'Reset Password',
         'create_password_auto' => 'Auto-Create Password',
+        'password_reset_flg' => 'Change Password at First Login',
         'avatar' => 'Avatar',
         'default_table_name' => 'User',
         'belong_organizations' => 'Affiliation settings',
@@ -569,6 +672,8 @@ return [
             'create_password_auto' => 'By checking, the password is automatically generated. (An email will be sent to the relevant user.)',
             'send_password' => 'By checking, we will e-mail user information to the relevant user.',
             'password_change' => 'The password has expired.',
+            'first_change_password' => 'Please set a new password.',
+            'password_reset_flg' => 'If set to YES, the screen to change the password will be displayed when the user logs in for the first time.',
         ],
         'message' => [
             'required_password' => 'Enter a password or select Auto-Create.',
@@ -589,6 +694,143 @@ return [
         'sso_provider_error' => 'Failed to acquire login information from provider. If you fail many times, please contact your administrator.',
         'noexists_user' => 'User did not exist in Exment. Please contact your administrator to add users first.',
         'throttle' => 'There are too many login attempts. Please try again after %s minutes.',
+        'not_accept_domain' => 'Login in domain :domain is not allowed.',
+        'login_button_format' => 'Login with :display_name',
+        'sso_provider_error_validate' => 'There was a problem with the login information obtained from the provider. Please check the following contents and contact the administrator.:errors',
+
+        'header' => 'Login Setting',
+        'description' => 'Configure Exment login settings such as SSO authentication and 2-step verification.',
+        'login_view_name' => 'Login Setting Display Name',
+        'login_type' => 'Login Type',
+        'oauth_provider_type' => 'Provider Type',
+        'oauth_provider_name' => 'Provider Name',
+        'oauth_client_id' => 'Client ID',
+        'oauth_client_secret' => 'Client Secret',
+        'oauth_scope' => 'Scope',
+        
+        'user_setting' => 'User Setting',
+        'mapping_user_column' => 'Account Search Column',
+        'mapping_setting' => 'Mapping Setting',
+        'update_user_info' => 'Update User Info',
+        'show_default_login_provider' => 'Show Default Login',
+        'sso_redirect_force' => 'Redirect SSO Login',
+        'sso_setting' => 'SSO Setting',
+        'sso_accept_mail_domain' => 'Accept Domain',
+        'sso_jit' => 'Create User',
+
+        'saml_name' => 'SAML Name',
+        'saml_idp' => 'IdP Setting',
+        'saml_idp_entityid' => 'IdP Entity ID',
+        'saml_idp_sso_url' => 'IdP Sign-on URL',
+        'saml_idp_ssout_url' => 'IdP Sign-out URL',
+        'saml_idp_x509' => 'IdP X.509 Certificate',
+        
+        'saml_sp' => 'SP Setting',
+        'saml_sp_entityid' => 'SP Entity ID',
+        'saml_sp_name_id_format' => 'SP Name ID Format',
+        'saml_sp_x509' => 'SP X.509 Certificate',
+        'saml_sp_privatekey' => 'SP Private Key',
+
+        'saml_option' => 'Option Setting',
+        'saml_option_name_id_encrypted' => 'Encrypt NameID',
+        'saml_option_authn_request_signed' => 'Sign AuthnRequest',
+        'saml_option_logout_request_signed' => 'Sign LogoutRequest',
+        'saml_option_logout_response_signed' => 'Sign LogoutResponse',
+        'saml_option_proxy_vars' => 'Use Proxy',
+        
+        'ldap_setting' => 'LDAP Setting',
+        'ldap_name' => 'LDAP Name',
+        'ldap_hosts' => 'Host Name',
+        'ldap_port' => 'Port No',
+        'ldap_base_dn' => 'Base DN',
+        'ldap_search_key' => 'Search Key',
+        'ldap_account_prefix' => 'Login Code Prefix',
+        'ldap_account_suffix' => 'Login Code Suffix',
+        'ldap_use_ssl' => 'Use SSL',
+        'ldap_use_tls' => 'Use TLS',
+
+        'redirect_url' => 'Redirect URL',
+
+        'login_button' => 'Login Button Setting',
+        'login_button_label' => 'Button Display Name',
+        'login_button_icon' => 'Icon',
+        'login_button_background_color' => 'Background Color',
+        'login_button_background_color_hover' => 'Background Color(hover)',
+        'login_button_font_color' => 'Font Color',
+        'login_button_font_color_hover' => 'Font Color(hover)',
+        
+        'login_test' => 'Login Test',
+        'login_test_redirect' => 'Redirect URL for Test',
+
+        'help' => [
+            'login_provider_type' => 'Please select the type of login provider.',
+            'login_provider_name' => 'Enter the Socialite name of the login provider using alphanumeric characters.',
+            'scope' => 'If you want to specify the scope, please enter them separated by commas.',
+            'redirect_url' => 'It is set automatically, so leave it blank basically. Enter if you want to explicitly specify the redirect URL.',
+            'redirect_url_default' => '*Default URL is :url.',
+            'login_button_label' => 'Enter the login button label.',
+            'login_button_icon' => 'Enter the login button icon.',
+            'login_button_background_color' => 'Enter the login button background color.',
+            'login_button_background_color_hover' => 'Enter the login button background color(hover).',
+            'login_button_font_color' => 'Enter the login button font color.',
+            'login_button_font_color_hover' => 'Enter the login button font color(hover).',
+            'show_default_login_provider' => 'If YES, the login form using the Exment ID and password will be displayed.',
+            'sso_redirect_force' => 'If YES, do not display the Exment login page and redirect directly to the SSO login page. *Effective only when there is only one SSO provider.',
+            'sso_jit' => 'If YES, if the logged-in user does not exist in Exment, use the login information to create a new Exment user. If NO, you need to create a user in Exment in advance.',
+            'update_user_info' => 'If YES, update Exment user information at login.',
+            'mapping_user_column' => 'From the account obtained by SSO, set which column to use to search for the Exment account.',
+            'sso_accept_mail_domain' => 'If you want to specify the domain that allows login, enter it. If you have more than one, please enter them with line breaks.',
+            'jit_rolegroups' => 'Please fill in if you want to assign a default role group when creating a new user.',
+            'mapping_description' => 'The field name returned by the provider must match the user field name in Exment. Please enter the field name returned from the provider. <br/>If you enter multiple values ​​separated by commas, the fields that have values ​​will be retrieved with priority from the beginning. <br /> Also, if you want to combine multiple fields, type "${Field_Name}". (Example: ${last_name} ${first_name})',
+            'login_test_sso' => 'The :login_type redirect URL for testing.<span class="red">*When performing the test, temporarily add or change the above URL to the callback URL of the provider\'s :login_type setting.</span>',
+                
+            'ldap_base_dn' => 'Enter the basic DN (distinguished name) used for authentication.',
+            'ldap_search_key' => 'Enter the login code attribute used for authentication.',
+            'ldap_account_prefix' => 'If there is a prefix that is automatically added to the login code entered by the user during authentication, enter it.(Ex：COMPNAME\\)',
+            'ldap_account_suffix' => 'If there is a suffix automatically added to the login code entered by the user during authentication, enter it.(Ex：@example.co.jp)',
+
+            'saml_idp_entityid' => 'Please enter the Entity ID of your IdP.',
+            'saml_idp_sso_url' => 'Please enter the endpoint URL when logging in to the IdP. Exment You will be redirected at login.',
+            'saml_idp_ssout_url' => 'If you want to log out from the IdP when you log out from Exment, enter the endpoint URL when logging out from the IdP. You will be redirected when you log out of Exment.',
+            'saml_idp_x509' => 'Please enter the public x509 certificate of your IdP.',
+            'saml_sp_name_id_format' => 'Select the identifier that links the IdP account and SP account.',
+            'saml_sp_entityid' => 'Enter the SP Entity ID.',
+            'saml_sp_x509' => 'Please enter the SP public x509 certificate.',
+            'saml_privatekey' => 'Please enter the SP private key.',
+            'saml_option_name_id_encrypted' => 'Set to YES to encrypt the NameID sent by the SP.',
+            'saml_option_authn_request_signed' => 'Set to YES to sign the authentication request sent by the SP.',
+            'saml_option_logout_request_signed' => 'Set to YES to sign the logout request sent by the SP.',
+            'saml_option_logout_response_signed' => 'Set to YES to sign the logout response sent by the SP.',
+            'saml_option_proxy_vars' => 'Set to YES if use Reverse Proxy.',
+            'saml_key_path' => '<br />*When reading from a file, place the file in the following path.<br/>%s',
+
+            'activate' => 'Enable this login. We recommend that you perform a "login test" in advance to confirm that you can successfully log in. Do you want to activate it?',
+            'activate_ldap_error' => 'Other LDAP authentication is enabled. If you want to enable this authentication, please disable the corresponding LDAP authentication first.',
+            'deactivate' => 'Disable this login. is this good?',
+        ],
+
+        'message' => [
+            'not_install_library' => '*:The library to execute name is not set. <a href=":url" target="_blank">Follow the steps below<i class="fa fa-external-link"></i></a> to install.',
+            'login_provider_caution' => '*First, additional settings for OAuth login are required. <a href=":url" target="_blank">Follow the steps below<i class="fa fa-external-link"></i></a> to install.',
+            'login_test_description' => 'Test the login with the set login information.<br />We recommend performing a login test before activating the login settings. <br>*If the setting value has been changed, save it first and then perform the test.',
+            'not_match_mapping' => 'The :mappingKey specified in the Exment field :key was not included in the field from the provider.',
+        ],
+
+        'login_type_options' => [
+            'oauth' => 'OAuth',
+            'saml' => 'SAML',
+            'ldap' => 'LDAP',
+        ],
+
+        'oauth_provider_type_options' => [
+            'google' => 'Google',
+            'github' => 'Github',
+            'facebook' => 'Facebook',
+            'twitter' => 'Twitter',
+            'linkedin' => 'Linkedin',
+            'bitbucket' => 'Bitbucket',
+            'other' => 'Other',
+        ],
     ],
 
     '2factor' => [
@@ -810,12 +1052,20 @@ return [
             'compare_column2_id' => 'Compare column(B)',
             'compare_type' => 'Condition',
 
+            'share_settings' => 'Data Share Setting',
+            'share_trigger_type' => 'Trigger',
+            'share_column_id' => 'Target Column',
+            'share_permission' => 'Target Permission',
+            'share_setting_sync' => 'Sync automatic data Sharing settings When Updating',
+
             'help' => [
                 'table_labels' => 'When selecting data, set the wording column to be displayed on the screen. Display as heading items in order from the top.<br/>Please refer to <a href="%s" target="_blank">here<i class="fa fa-external-link"></i></a> for detail.',
                 'uniques' => 'Set a composite unique key. If all the values ​​in these columns match the registered values, an error will occur when saving the data.',
                 'compare_columns' => 'Compares two columns when saving data. You can save only when the column value matches the set conditions.',
                 'table_label_format' => '(For advanced users) You can flexibly set the format to be displayed in the heading. Please refer to&nbsp;<a href="%s" target="_blank">here<i class="fa fa-external-link"></i></a>&nbsp;for the parameter to display the value.* If you set a value to this item, "header display column setting" above will be disabled.',
                 'form_action_disable_flg' => 'The checked operation cannot be executed from the screen. Check this if you want to manage data only from the API or dashboard.',
+                'share_settings' => 'When saving the data, the data is automatically shared with the organization or user who is set in the data.',
+                'share_setting_sync' => 'When "Update" is set for one or more triggers in "Automatic data sharing setting", if YES, share the user/organization other than the user/organization set in the column when updating the data. Remove from settings.',
             ],
             'form_action_options' => [
                 'create' => 'Create',
@@ -823,6 +1073,14 @@ return [
                 'delete' => 'Delete',
                 'import' => 'Import',
                 'export' => 'Export',
+            ],
+            'share_trigger_type_options' => [
+                'create' => 'Created',
+                'update' => 'Updated',
+            ],
+            'share_permission_options' => [
+                'edit' => 'Edit',
+                'view' => 'Share',
             ],
             
             'filter_condition_compare_options' => [
@@ -833,7 +1091,10 @@ return [
                 'gte' => 'A is greater than or equal to B', 
                 'lte' => 'A is less than or equal to B', 
             ],
-            
+
+            'compare_column_options' => [
+                'system_date' => 'System Date', 
+            ],            
         ],
     ],
     
@@ -846,6 +1107,7 @@ return [
         'order' => 'Order',
         'add_custom_form_flg' => 'Add to the Default Form',
         'add_custom_view_flg' => 'Add to the Default View',
+        'add_table_label_flg' => 'Add to the Table Label',
         'auto_number_format_rule' => 'Auto Number format of the role',
         'child_count_text' => '%s:Count',
         'child_sum_text' => '%s:%s(Sum)',
@@ -858,6 +1120,7 @@ return [
         'options' => [
             'header' => 'Detail Option',
             'index_enabled' => 'Index Enabled',
+            'freeword_search' => 'Freeword Search Target',
             'unique' => 'Unique',
             'init_only' => 'Input Only Once',
             'login_user_default' => 'Set initial value to login user',
@@ -886,6 +1149,7 @@ return [
             'select_import_column_id' => 'Key column when importing',
             'select_export_column_id' => 'Key column when exporting',
             'select_load_ajax' => 'Narrow down the choices',
+            'showing_all_user_organizations' => 'Display users/organizations without permission',
             'true_value' => 'Select1 Value',
             'true_label' => 'Select1 Label',
             'true_label_default' => 'Yes',
@@ -928,10 +1192,13 @@ return [
             "organization" => "Organization",
         ],
         'help' => [
+            'column_type' => 'Please select this column type. When entering data, the form changes according to the column type.',
             'index_enabled' => 'If set to YES, the search index is added. you can narrow down the conditions in search and view. <br/>Please check <a href="%s" target="_blank">here<i class="fa fa-external-link"></i></a>',
+            'freeword_search' => 'If set to YES, it will be the target column when performing a free word search.',
             'unique' => 'If you do not want to register the same value with other data in duplicate, please set it to YES. * For data with a large number of cases, we recommend setting "Search index" to YES.',
             'init_only' => 'If set to YES, the value can be entered only once. After saving, it is displayed as read-only.',
             'default' => 'The initial value of the item at the time of new registration.',
+            'placeholder' => 'A string that is displayed in a light color as guidance in the field before input.',
             'help' => 'Help string displayed below the field.',
             'min_width' => 'Enter the minimum value of the column width when displaying the list as an integer (px).',
             'max_width' => 'Enter the maximum value of the column width when displaying the list as an integer (px).',
@@ -945,6 +1212,7 @@ return [
             'select_item_valtext' => 'Enter choices by line break separator. The word before the comma is the value, the word after the comma is the label.<br/>Ex：「1,Adult<br/>2,Underage」→"1" is the value saving data. "Adult" is the label user selected.',
             'select_target_table' => 'Select the table to be selected.',
             'select_load_ajax' => 'If set to YES, the options are not read at first, but the data is searched by the user input value, and the candidates are narrowed down. <br/> * Regardless of this setting, if the number of data items is %s or more, it will be set to narrow down to improve performance.',
+            'showing_all_user_organizations' => 'When set to YES, all users/organizations are displayed in the selection without checking the permission to access the table. *If this setting is NO, the options displayed will be limited to the users and organizations that can access this table.',
             'select_target_view' => 'To narrow the data, specify a condition view. Please create the condition view on the custom table setting screen first.',
             'select_import_column_id' => 'When importing data, you can specify custom columns to narrow the data in the selected table. If not set, use id. Please refer to &nbsp;<a href="%s" target="_blank">here<i class="fa fa-external-link"></i></a>&nbsp; for details.',
             'select_import_column_id_key' => 'Change of specification method of data of parent table',
@@ -961,8 +1229,10 @@ return [
             'currency_symbol' => 'Please select the format of the currency displayed on the screen.',
             'add_custom_form_flg' => 'After creating custom column, you can add it to the default custom form. To add it, please set it to YES.<br />*It can be set only when new column is created. When updating please set it from "Form" page.',
             'add_custom_view_flg' => 'After creating custom column, you can add it to the default custom view. To add it, please set it to YES.<br />*It can be set only when new column is created. When updating please set it from "View" page.',
+            'add_table_label_flg' => 'After creating custom column, you can add it to table labels. To add it, please set it to YES.<br />*It can be set only when new column is created. When updating please set it from "Table Expand" page.',
             'select_table_deny' => "You don't have the permissions for the referenced table '%s'. Please contact your system administrator to request additional permissions.",
             'login_user_default' => 'If set to YES, the initial value of the item will be the login user.',
+            'multiple_enabled' => 'By setting to YES, you can register multiple values ​​in this column. *Some functions are limited.',
         ],
         'available_characters' => [
             'lower' => 'Lower Letters', 
@@ -993,6 +1263,7 @@ return [
         'suggest_column_label' => 'Table Column',
         'suggest_other_label' => 'Other',
         'form_block_name' => 'Form Block Name',
+        'read_only' => 'Read Only',
         'view_only' => 'View Only',
         'hidden' => 'Hidden Field',
         'required' => 'Required',
@@ -1002,6 +1273,8 @@ return [
         'hasmany_type' => 'Make the form in table form.',
         'header_basic_setting' => 'Form Basic Setting',
         'changedata' => 'Data Linkage Setting',
+        'relation_filter' => 'Relation Filter Setting',
+        'relation_filter_manual' => 'Relation Filter Setting',
         'items' => 'Form Items',
         'suggest_items' => 'Suggest Items',
         'add_all_items' => 'Add All Items',
@@ -1029,11 +1302,17 @@ return [
         'help'=> [
             'items' => 'Set the items to be displayed on the data form. <br /> From the "form item candidate list", drag & drop the item you want to display on the form to "form item column 1" "form item column 2".',
             'changedata' => 'When you select another item in the form, you can copy the value of the selected data to the item.<br />Please check <a href="%s" target="_blank">here<i class="fa fa-external-link"></i></a>.',
+            'relation_filter' => 'If the column of the parent table or the referenced table of this column exists in the form, you can narrow down the selection of this column by selecting the column.',
             'changedata_no_item' => '*There are no columns in the table whose column type is "Select (From Table)", "User", and "Organization". Register these columns if you want to use data linkage settings.',
+            'relation_filter_no_item' => '*The parent of column "%s" or the table to be referenced does not exist.',
+            'html' => 'Enter the HTML to display.<span class="red">*The entered HTML will be embedded as it is. It also runs the script. Please be careful when inputting.</span>',
+            'read_only' => 'It will be displayed on the screen as a read-only item. You can rewrite the value by the data related setting, set the calculation formula, and get the value by the calculation formula of other items.',
+            'view_only' => 'It is displayed on the screen as a display-only item. It is not possible to rewrite the value by the data related setting or get the value by the calculation formula of other items.',
         ],
 
         'message' => [
             'no_exists_column' => 'Required items have not been set.',
+            'confirm_required' => 'Required items are not set. Are you sure you want to save it as it is?',
         ],
     ],
 
@@ -1058,11 +1337,49 @@ return [
         'header' => 'Mass Update Setting',
         'description' => 'Make settings to update selected data collectively.',
         'operation_name' => 'Mass Update Label',
+        'operation_type' => 'Update timing',
         'custom_operation_button_label' => 'Mass Update Setting',
         'custom_operation_columns' => 'Update Column Setting',
+        'custom_operation_conditions' => 'Update Condition',
         'description_custom_operation_columns' => 'Set the target column and update value for mass update.',
         'view_column_target' => 'Target Column',
+        'operation_update_type' => 'Update Type',
         'update_value_text' => 'Update Value',
+        
+        'operation_type_options' => [
+            'bulk_update' => 'Pressing button on the list screen',
+            'button' => 'Pressing the button on the data details',
+            'create' => 'Creating new data',
+            'update' => 'Updating data',
+            //'notified' => 'Sending notification',
+        ],
+        'operation_type_options_short' => [
+            'bulk_update' => 'List Button',
+            'button' => 'Detail Button',
+            'create' => 'Creating data',
+            'update' => 'Updating data',
+        ],
+        'operation_update_type_options' => [
+            'default' => 'Fixed Value',
+            'system' => 'System Value',
+        ],
+        'operation_value_type_options' => [
+            'execute_datetime' => 'Execute Datetime',
+            'login_user' => 'Login User',
+            'berong_organizations' => 'Berong Organizations',
+        ],
+        'options' => [
+            'button_label' => 'Button Label',
+            'button_class' => 'Button HTML class',
+            'button_icon' => 'Button Icon',
+        ],
+        'help' => [
+            'operation_type' => 'Specify the timing to update the data.',
+            'button_icon' => 'The icon to add to the button HTML.',
+            'button_class' => 'The class to add to the button HTML.',
+            'custom_operation_columns' => 'Set the target column of data update and update value.',
+            'custom_operation_conditions' => 'Specify the condition of the data that can execute the registered update settings.',
+        ],
     ],
 
     'custom_view' => [
@@ -1183,6 +1500,8 @@ return [
         'message' => [
             'over_filters_max' => 'Cannot set 6 or more display filters.',
             'over_sorts_max' => 'Cannot set 6 or more display sorts.',
+            'used_notify_error' => 'Used in the notification settings. Please delete it in advance.',
+            'used_column_error' => 'Used in the refinement view for custom column settings. Please delete it in advance.',
         ],
 
         'custom_view_button_label' => 'View',
@@ -1211,6 +1530,7 @@ return [
         'users_count' => 'User count',
         'organizations_count' => 'Organization count',
         'share_description' => 'Share this data with other users and organizations. Sharing enables other users and organizations to access this data.',
+        'data_share_description' => 'Share this %1$s with other users and organizations. Sharing enables other users and organizations to access this data.',
 
         'description_form' => [
             'system' => 'Please select users/organizations to whom role is given for the entire system.',
@@ -1222,6 +1542,12 @@ return [
             'plugin' => 'Please select users/organizations to whom role is given for this plugin.',
             'plugin_disableorg' => 'Please select users to whom role is given for this plugin.',
             'manual_link' => '<br />Please read <a href="%s" target="_blank">here<i class="fa fa-external-link"></i></a> about roles and permissions.'
+        ],
+
+        'share_target_options' => [
+            'view' => 'View',
+            'dashboard' => 'Dashboard',
+            'value' => 'Data',
         ],
 
         'role_type_options' => [
@@ -1240,6 +1566,7 @@ return [
         'role_type_option_system' => [
             'system' => ['label' => 'System Setting', 'help' => 'Users can edit system setting.'],
             'login_user' => ['label' => 'Manage login user', 'help' => 'You can manage the users who log in to Exment.'],
+            'filter_multiuser_all' => ['label' => 'Get All User and Org', 'help' => 'Information of all users/organizations can be obtained regardless of the setting of User/organization filter.'],
             'workflow' => ['label' => 'Workflow Settings', 'help' => 'You can change the workflow settings.'],
             'custom_table' => ['label' => 'Custom Table', 'help' => 'Users can add, edit, delete custom tables.'],
             'custom_form' => ['label' => 'Form', 'help' => 'Users can add, edit, delete custom forms.'],
@@ -1277,6 +1604,8 @@ return [
         'role_type_option_value' => [
             'custom_value_edit' => ['label' => 'Editor', 'help' => 'Users can edit personnel data in custom tables.'],
             'custom_value_view' => ['label' => 'Viewer', 'help' => 'Users can view personnel data in custom tables.'],
+            'data_share_edit' => ['label' => 'Editor', 'help' => 'Users can edit personnel %s in custom tables.'],
+            'data_share_view' => ['label' => 'Viewer', 'help' => 'Users can view personnel %s in custom tables.'],
         ], 
         'role_type_option_plugin' => [
             'plugin_access' => ['label' => 'Access', 'help' => 'User can use this plugin.'],
@@ -1379,7 +1708,8 @@ return [
             'mail_template' => 'Mail template',
             'mail' => 'Email transmission history',
             'operation_log' => 'Operation log',
-            'api_setting' => 'API Settings',
+            'api_setting' => 'API Setting',
+            'login_setting' => 'Login Setting',
         ],
     ],
 
@@ -1398,15 +1728,13 @@ return [
         'template_view_name' => 'Template View Name',
         'form_description' => 'Template Description',
         'thumbnail' => 'Thumbnail',
-        'upload_template' => 'Upload(zip)',
-        'upload_template_excel' => 'Upload(Excel)',
+        'upload_template' => 'Upload',
         'export_target' => 'Export Target',
         'target_tables' => 'Target Tables',
         
         'help' => [
             'thumbnail' => 'Recommended size:256px*256px',
-            'upload_template' => 'Upload the template zip file exported on another system and import the settings into this system.',
-            'upload_template_excel' => 'Upload the configuration file created in Excel format and import the settings to the system.',
+            'upload_template' => 'The template zip file exported or created in Excel, and import the settings into this system.',
             'export_target' => 'Select export target.',
             'target_tables' => 'Select export tables. If not select, export all tables.',
         ],
@@ -1495,14 +1823,17 @@ return [
             'view_export_page' => 'Exports the data for the current page in the format of the currently displayed view.',
             'template' => 'Download the template file to use for the import.',
             'import' => 'Displays a dialog for executing import. *For the data to be imported, use the data output by "Export Template" or "Export(All System/Custom Columns)".',
+            'document_upload' => 'You can upload attachments related to this data. The maximum file size of one file is :max_size, and you can upload up to :max_count files at a time.',
         ],
         'message' => [
             'operation_notfound' => 'The data to be updated was not found.',
+            'operation_contains_notmatch_condition' => 'The data %s that cannot be updated is selected.',
             'operation_succeeded' => 'Batch update was performed.',
             'action_disabled' => 'Operations from the screen are restricted.',
             'restore' => 'Are you sure to restore this item ?',
             'restore_succeeded' => 'Restore succeeded !',
             'hard_delete' => 'Permanently delete? (This operation cannot be restored)',
+            'editor_image_oversize' => 'The file size is too large.',
         ],
     ],
 
@@ -1530,11 +1861,24 @@ return [
         'target_custom_value' => 'Target data',
         'data_refer' => 'Display data linked to this notification',
         'all_check' => 'Make it bulk read',
+        'read_all' => 'Mark all notifications as read',
+        'unread_all' => 'Mark all notifications unread',
+        'delete_all' => 'Delete all notifications',
+        'batch_all' => 'batch processing',
+        'confirm_text' => [
+            'read_all' => 'Mark all notifications as read. Is it OK?',
+            'unread_all' => 'Marks all notifications unread. Is it OK?',
+            'delete_all' => 'Delete all notifications. Is it OK?',
+        ],
         'read_flg_options' => [
             '0' => 'Unread',
             '1' => 'Read',
         ],
         'message' => [
+            'batch_error' => 'Batch processing has failed. Please contact your system administrator.',
+            'read_succeeded' => 'Changed all notifications to read.',
+            'unread_succeeded' => 'Changed all notifications to unread.',
+            'delete_succeeded' => 'Removed all notifications.',
             'check_succeeded' => 'The selected data has been changed to read.',
             'check_notfound' => 'There is no data to update.',
             'no_newitem' => 'There is no new arrival notification.',
@@ -1559,6 +1903,7 @@ return [
         'notify_day' => 'Notification date',
         'notify_beforeafter' => 'Before and After Notification',
         'notify_hour' => 'Notification Date',
+        'notify_myself' => 'Notify the worker',
         'notify_action' => 'Notify Action',
         'action_settings' => 'Notify Action Setting',
         'notify_action_target' => 'Notify Target',
@@ -1567,8 +1912,11 @@ return [
         'notify_select' => 'Select Notify Target',
         'message_input' => 'Input Message',
         'webhook_url' => 'Webhook URL',
+        'mention_here' => 'Notify all members',
+        'mention_setting_manual_id' => 'slack-idsettingmethod',
 
         'help' => [
+            'active_flg' => 'If you want to temporarily disable notifications, set it to NO.',
             'notify_day' => 'Please enter the date of the notification. By inputting "0", will notify you on the day.',
             'custom_table_id' => 'Select the table to use as the condition to notify.',
             'custom_view_id' => 'Specify the condition view when you want to narrow the data of the target table. Please create the condition view on the custom table setting screen first.',
@@ -1576,11 +1924,14 @@ return [
             'notify_trigger' => 'Please select the content to be notified trigger.',
             'trigger_settings' => 'Select the datetime or date field for judging whether to notify.',
             'notify_beforeafter' => 'Choose whether to notify you that you are "before" or "after" of the date you are registering.<br />Ex: If "Notification date" is 7, "before and after notification" is "before", notification is executed 7 days before the date of the specified field.',
+            'notify_myself' => 'By setting YES, even if the notification target is the logged-in user who performed the work, the notification will be executed to that logged-in user.',
             'notify_hour' => 'The time to execute the notification. Enter from 0 to 23. Ex: When entering "6", execute notification at 6:00',
             'notify_action' => 'Please select the notification action to be done when the conditions are met.',
             'notify_action_target' => 'Select the target of notification destination.',
             'mail_template_id' => 'Select the template of the mail to send. When creating a new one, please create a new template in the mail template screen beforehand.',
             'webhook_url' => 'To make Slack or Teams notifications, you need to get a webhook URL. <a href="%s" target="_blank">Learn more</a> <br/>Slack and Teams are not compatible.',
+            'mention_here' => 'Sends an @here mention that notifies all members with active status on the specified channel. * To perform individual mentions, set the "Notification target" item below.',
+            'slack_user_column_not_setting' => '*The "Slack ID setting column (user)" in the system settings is not registered. After specifying the column to register Slack ID, you can set the notification target.',
         ],
 
         'notify_trigger_options' => [
@@ -1604,6 +1955,10 @@ return [
             'has_roles' => 'Have the Role User',
             'created_user' => 'Create User',
             'work_user' => 'Next Work User',
+        ],
+
+        'message' => [
+            'no_action_target' => 'There was no notification target.',
         ],
     ],
     
@@ -1653,6 +2008,7 @@ return [
         'scopes' => [
             'me' => 'Get Login User Info',
             'table_read' => 'Get Table Info',
+            'view_read' => 'Get View Info',
             'table_write' => 'Get, Create, Update, Delete Table',
             'value_read' => 'Get Value',
             'value_write' => 'Get, Create, Update, Delete Value',
@@ -1673,6 +2029,7 @@ return [
             'delete_disabled' => 'This data cannot be deleted.',
             'not_index_enabled' => ':attribute does not have a search index.',
             'data_not_found' => 'The target data cannot be found.',
+            'form_action_disabled' => 'Depending on the settings, this action cannot be performed.',
             'workflow_nostart' => 'The workflow has not started or is out of scope.',
             'workflow_end' => 'The workflow has been completed or excluded.',
             'workflow_action_disabled' => 'Invalid action or no permission.',
@@ -1682,6 +2039,8 @@ return [
             'disapproval_ip' => 'Unauthorized IP address.',
             'already_deleted' => 'Already deleted this data.',
             'plugin_not_found' => 'Plugin not found.',
+            'wrong_view_and_table' => 'The target table and view are different.',
+            'unsupported_view_kind_type' => 'The view type is not supported by the API.',
         ],
 
         'help' =>[
@@ -1714,6 +2073,24 @@ return [
         'redirect' => 'Redirect URL',
     ],
 
+    'command' => [
+        'import' => [
+            'file_count' => 'Number of applicable files:',
+            'file_info' => ' case implementation start. file:{%s}',
+            'error_info' => 'Error info : ',
+            'success_message' => 'The import was successful. number:{%s}',
+            'error_table' => 'The target table {%s} cannot be found.',
+            'error_info_ex' => 'An error occurred during processing. There is already imported data.{%s}',
+        ],
+        'export' => [
+            'success_message' => 'The export was successful. Directory path:%s',
+        ],
+        'resetpassword' => [
+            'notify_password' => 'Executed password reset. A new password is : %s',
+            'success' => 'Executed password reset.',
+        ],
+    ],
+    
     'condition' => [
         'condition_target' => 'Condition Item',
         'condition_key' => 'Search Condition',
@@ -1725,6 +2102,7 @@ return [
             'role' => 'Role',
             'system' => 'System',
             'column' => 'Custom Column',
+            'form' => 'Display type',
         ],
         'condition_key_options' => [
             'eq' => '',
@@ -1735,6 +2113,12 @@ return [
             'number_lte' => 'Less Than or Equal',
             'day_on_or_after' => 'After',
             'day_on_or_before' => 'Before',
+        ],
+
+        'form_data_type_options' => [
+            'show' => 'Data Detail',
+            'create' => 'Data Creation',
+            'edit' => 'Data Edit',
         ],
 
         'condition_join_options' => [

@@ -10,12 +10,13 @@ use Exceedone\Exment\Enums\RoleType;
 use Exceedone\Exment\Enums\Permission;
 use Exceedone\Exment\Storage\Disk\PluginDiskService;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 class Plugin extends ModelBase
 {
     use Traits\UseRequestSessionTrait;
     use Traits\ClearCacheTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
 
     protected $casts = ['options' => 'json', 'custom_options' => 'json'];
 
@@ -69,7 +70,7 @@ class Plugin extends ModelBase
     /**
      * Get All plugin ids, user has setting permission
      *
-     * @return void
+     * @return array|\Illuminate\Support\Collection
      */
     public static function getIdsHasSettingPermission()
     {
@@ -91,7 +92,7 @@ class Plugin extends ModelBase
     /**
      * Match(contain) plugin type using enum PluginType
      *
-     * @return void
+     * @return bool is match plugin type. if $plugin_types is multiple, whether contains.
      */
     public function matchPluginType($plugin_types)
     {
@@ -112,26 +113,30 @@ class Plugin extends ModelBase
 
     public static function getPluginByUUID($uuid)
     {
-        return static::where('uuid', '=', $uuid)
-            ->first();
+        return static::getPluginsCache()->first(function ($plugin) use ($uuid) {
+            return strcmp($plugin->uuid, $uuid) == 0;
+        });
     }
 
     public static function getPluginByName($plugin_name)
     {
-        return static::where('plugin_name', '=', $plugin_name)
-            ->first();
+        return static::getPluginsCache()->first(function ($plugin) use ($plugin_name) {
+            return strcmp($plugin->plugin_name, $plugin_name) == 0;
+        });
     }
 
-    //Get plugin by custom_table name
-    //Where active_flg = 1 and target_tables contains custom_table id
-    // *Filtering only accessible.
     /**
-     * @param $id
+     * Get plugin by custom_table name
+     * Where active_flg = 1 and target_tables contains custom_table id
+     * Filtering only accessible.
+     *
+     * @param CustomTable $custom_table
+     * @param bool $filterAccessible
      * @return mixed
      */
     public static function getPluginsByTable($custom_table, $filterAccessible = true)
     {
-        if (!isset($custom_table)) {
+        if (is_null($custom_table)) {
             return [];
         }
 
@@ -153,7 +158,7 @@ class Plugin extends ModelBase
     /**
      * Get Batches filtering hour
      *
-     * @return void
+     * @return Collection
      */
     public static function getBatches()
     {
@@ -167,7 +172,7 @@ class Plugin extends ModelBase
     /**
      * Get Batches filtering has Cron
      *
-     * @return void
+     * @return Collection
      */
     public static function getCronBatches()
     {
@@ -187,17 +192,15 @@ class Plugin extends ModelBase
     /**
      * Get Plugin's class object
      *
-     * @return void
+     * @return mixed \Exceedone\Exment\Services\Plugin\PluginBase
      */
     public function getClass($plugin_type, $options = [])
     {
-        extract(
-            array_merge(
-                [
-                'throw_ex' => true,
-                ],
-                $options
-            )
+        $options = array_merge(
+            [
+            'throw_ex' => true,
+            ],
+            $options
         );
 
         if (is_null($plugin_type)) {
@@ -207,7 +210,7 @@ class Plugin extends ModelBase
             $class = PluginType::getPluginClass($plugin_type, $this, $options);
         }
         
-        if (!isset($class) && $throw_ex) {
+        if (!isset($class) && $options['throw_ex']) {
             throw new \Exception('plugin not found');
         }
 
@@ -258,22 +261,135 @@ class Plugin extends ModelBase
         $diskService = new PluginDiskService($this);
         // sync from crowd.
         $diskService->syncFromDisk();
+        $this->requirePlugin($diskService);
 
         $plugin_fullpath = $diskService->localSyncDiskItem()->dirFullPath();
-        $this->requirePlugin($plugin_fullpath);
-
         return path_join($plugin_fullpath, ...$pass_array);
+    }
+
+    /**
+     * Get plugin file paths. relative path, not fullpath
+     */
+    public function getPluginFilePaths($dirPath = null, $subdir = true, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $dirPath) = $this->initPluginDisk($dirPath, $diskService);
+
+        $func = $subdir ? 'allFiles' : 'files';
+        $files = $disk->{$func}($dirPath);
+
+        // remove "(pluginname)/"
+        $files = collect($files)->map(function ($file) use ($dirName) {
+            return ltrim(ltrim($file, $dirName), '/');
+        })->toArray();
+
+        return $files;
+    }
+
+    /**
+     * Get plugin directories paths. relative path, not fullpath
+     */
+    public function getPluginDirPaths($dirPath = null, $subdir = true, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $dirPath) = $this->initPluginDisk($dirPath, $diskService);
+
+        $func = $subdir ? 'allDirectories' : 'directories';
+        $dirs = $disk->{$func}($dirPath);
+
+        // remove "(pluginname)/"
+        $dirs = collect($dirs)->map(function ($dir) use ($dirName) {
+            return ltrim(ltrim($dir, $dirName), '/');
+        })->toArray();
+
+        return $dirs;
+    }
+
+    /**
+     * Get plugin file data
+     *
+     * @param string $path file relative path
+     * @param PluginDiskService|null $diskService
+     * @return void
+     */
+    public function getPluginFiledata(string $path, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $filePath) = $this->initPluginDisk($path, $diskService);
+
+        return $disk->get($filePath);
+    }
+
+    /**
+     * Put plugin file. upload to crowd.
+     *
+     * @param string $path file relative path
+     * @param PluginDiskService|null $diskService
+     * @return void
+     */
+    public function putPluginFile(string $path, $file, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $filePath) = $this->initPluginDisk($path, $diskService, ['exceptionFileNotFound' => false]);
+
+        return $disk->put($filePath, $file);
+    }
+
+    /**
+     * Putasfile plugin file. upload to crowd.
+     *
+     * @param string|null $dirPath file relative path
+     * @param string $fileName
+     * @param mixed $file
+     * @param PluginDiskService|null $diskService
+     * @return void
+     */
+    public function putAsPluginFile(?string $dirPath, string $fileName, $file, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $dirPath) = $this->initPluginDisk($dirPath, $diskService, ['exceptionFileNotFound' => false]);
+
+        return $disk->putFileAs($dirPath, $file, $fileName);
+    }
+
+    /**
+     * Delete plugin file. upload to crowd.
+     *
+     * @param string $path file relative path
+     * @param PluginDiskService|null $diskService
+     * @return void
+     */
+    public function deletePluginFile(string $path, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $filePath) = $this->initPluginDisk($path, $diskService, ['exceptionFileNotFound' => false]);
+
+        // delete local disk
+        $diskService->localSyncDiskItem()->disk()->delete($filePath);
+        return $disk->delete($filePath);
+    }
+
+    /**
+     * is this path is directory or not
+     *
+     * @param string|null $path
+     * @param PluginDiskService|null $diskService
+     * @return boolean
+     */
+    public function isPathDir(?string $path, ?PluginDiskService $diskService = null)
+    {
+        list($diskService, $disk, $dirName, $filePath) = $this->initPluginDisk($path, $diskService);
+
+        $meta = $disk->getDriver()->getMetadata($filePath);
+        return isMatchString(array_get($meta, 'type'), 'dir');
     }
 
     /**
      * call require
      *
-     * @param [type] $pathDir
+     * @param PluginDiskService $diskService
      * @return void
      */
-    public function requirePlugin($fullPathDir)
+    public function requirePlugin(?PluginDiskService $diskService = null)
     {
+        list($diskService, $disk, $dirName, $filePath) = $this->initPluginDisk(null, $diskService, ['sync' => true]);
+
         // call plugin
+        $fullPathDir = $diskService->localSyncDiskItem()->dirFullPath();
         $plugin_paths = \File::allFiles($fullPathDir);
         foreach ($plugin_paths as $plugin_path) {
             $pathinfo = pathinfo($plugin_path);
@@ -288,6 +404,46 @@ class Plugin extends ModelBase
         }
     }
     
+    /**
+     * Initialize plugin disk.
+     *
+     * @param string $path
+     * @param PluginDiskService|null $diskService
+     * @param array $options
+     * @return array offset 0:PluginDiskService, 1:disk, 2: root dir name, 3: joined path.
+     */
+    protected function initPluginDisk(string $path = null, ?PluginDiskService $diskService = null, array $options = [])
+    {
+        $options = array_merge([
+            'sync' => false,
+            'exceptionFileNotFound' => true,
+        ], $options);
+
+        if (!isset($diskService)) {
+            $diskService = new PluginDiskService($this);
+            if (boolval($options['sync'])) {
+                $diskService->syncFromDisk();
+            }
+        }
+
+        $disk = $diskService->diskItem()->disk();
+        $dirName = $diskService->diskItem()->dirName();
+        
+        if (!$disk->exists($dirName)) {
+            throw new \League\Flysystem\FileNotFoundException($dirName);
+        }
+
+        $filePath = path_join($dirName, $path);
+        if (!$disk->exists($filePath) && boolval($options['exceptionFileNotFound'])) {
+            throw new \League\Flysystem\FileNotFoundException($filePath);
+        }
+
+        return [$diskService, $disk, $dirName, $filePath];
+    }
+
+
+
+
     //Check all plugins satisfied take out from function getPluginByTableId
     //If calling event is not button, then call execute function of this plugin
     //Because namspace can't contains specifies symbol
@@ -343,6 +499,7 @@ class Plugin extends ModelBase
             return [];
         }
 
+        $options = ['throw_ex' => false];
         $buttonList = [];
         foreach ($plugins as $plugin) {
             if (!$plugin->matchPluginType(PluginType::PLUGIN_TYPE_BUTTON())) {
@@ -354,22 +511,30 @@ class Plugin extends ModelBase
             foreach ($plugin_types as $plugin_type) {
                 switch ($plugin_type) {
                     case PluginType::DOCUMENT:
-                        if (in_array($event, [PluginButtonType::FORM_MENUBUTTON_SHOW])) {
-                            $buttonList[] = [
-                                'plugin_type' => $plugin_type,
-                                'plugin' => $plugin,
-                            ];
+                        if (!in_array($event, [PluginButtonType::FORM_MENUBUTTON_SHOW])) {
+                            break;
                         }
+
+                        // call PluginType::BUTTON as throw_ex is false
+                        $class = $plugin->getClass(PluginType::DOCUMENT, $options);
+                        if (!isset($class)) {
+                            admin_error(exmtrans('common.error'), $plugin->getCannotReadMessage());
+                            break;
+                        }
+
+                        $buttonList[] = [
+                            'plugin_type' => $plugin_type,
+                            'plugin' => $plugin,
+                        ];
                         break;
                     case PluginType::TRIGGER:
                     case PluginType::BUTTON:
-                        $event_triggers = toArray($plugin->options['event_triggers']);
+                        $event_triggers = toArray(array_get($plugin->options, 'event_triggers', []));
                         if (!in_array($event, $event_triggers) || is_null(PluginButtonType::getEnum($event))) {
                             break;
                         }
                         
                         // call PluginType::BUTTON as throw_ex is false
-                        $options = ['throw_ex' => false];
                         $class = $plugin->getClass(PluginType::BUTTON, $options);
                         $class = isset($class) ? $class : $plugin->getClass(PluginType::TRIGGER, $options);
                         if (!isset($class)) {
@@ -390,7 +555,9 @@ class Plugin extends ModelBase
     }
 
     /**
-     * @param $plugins
+     * get plugins for import
+     *
+     * @param CustomTable $custom_table
      * @return array
      */
     public static function pluginPreparingImport($custom_table)
@@ -464,7 +631,7 @@ class Plugin extends ModelBase
     /**
      * Get plugin page object model
      *
-     * @return void
+     * @return Collection
      */
     public static function getPluginPages()
     {
@@ -474,7 +641,7 @@ class Plugin extends ModelBase
     /**
      * Get plugin scripts and styles
      *
-     * @return void
+     * @return Collection
      */
     public static function getPluginPublics()
     {
@@ -484,7 +651,7 @@ class Plugin extends ModelBase
     /**
      * Get plugin sessions
      *
-     * @return void
+     * @return Collection
      */
     protected static function getPluginPublicSessions($targetPluginTypes, $getAsClass = false)
     {
@@ -589,7 +756,7 @@ class Plugin extends ModelBase
     /**
      * Get route uri for page
      *
-     * @return void
+     * @return string
      */
     public function getRouteUri($endpoint = null)
     {
@@ -600,7 +767,7 @@ class Plugin extends ModelBase
      * Get option uri.
      * set snake_case.
      *
-     * @return void
+     * @return string
      */
     public function getOptionUri()
     {
@@ -661,18 +828,13 @@ class Plugin extends ModelBase
         return $obj;
     }
     
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-        
     public function getCustomOption($key, $default = null)
     {
         return $this->getJson('custom_options', $key, $default);
+    }
+    public function setCustomOption($key, $val = null)
+    {
+        return $this->setJson('custom_options', $key, $val);
     }
 
     protected static function boot()

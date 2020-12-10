@@ -3,6 +3,7 @@
 namespace Exceedone\Exment\ColumnItems;
 
 use Encore\Admin\Form\Field;
+use Exceedone\Exment\Enums\FilterType;
 use Exceedone\Exment\Enums\FormColumnType;
 
 abstract class FormOtherItem implements ItemInterface
@@ -42,7 +43,7 @@ abstract class FormOtherItem implements ItemInterface
      */
     public function name()
     {
-        return null;
+        return make_uuid();
     }
 
     /**
@@ -64,7 +65,7 @@ abstract class FormOtherItem implements ItemInterface
     /**
      * get Text(for display)
      */
-    public function text()
+    protected function _text($v)
     {
         return array_get($this->form_column, 'options.text');
     }
@@ -73,10 +74,10 @@ abstract class FormOtherItem implements ItemInterface
      * get html(for display)
      * *Please escape
      */
-    public function html()
+    protected function _html($v)
     {
         // default escapes text
-        return esc_script_tag($this->text());
+        return html_clean($this->_text($v));
     }
 
     /**
@@ -114,6 +115,7 @@ abstract class FormOtherItem implements ItemInterface
     {
         $classname = $this->getAdminFieldClass();
         $field = new $classname($this->html(), []);
+        $this->setAdminOptions($field, null);
 
         return $field;
     }

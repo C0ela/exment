@@ -4,9 +4,14 @@ namespace Exceedone\Exment\Services\DataImportExport\Providers\Import;
 
 use Carbon\Carbon;
 use Exceedone\Exment\Services\DataImportExport\DataImportExportService;
+use Exceedone\Exment\Enums\ValidateCalledType;
 
 class DefaultTableProvider extends ProviderBase
 {
+    protected $custom_table;
+
+    protected $custom_columns;
+    
     protected $primary_key;
     
     protected $filter;
@@ -22,7 +27,7 @@ class DefaultTableProvider extends ProviderBase
     {
         $this->custom_table = array_get($args, 'custom_table');
 
-        $this->custom_columns = $this->custom_table->custom_columns;
+        $this->custom_columns = $this->custom_table->custom_columns_cache;
 
         $this->primary_key = array_get($args, 'primary_key', 'id');
 
@@ -40,29 +45,54 @@ class DefaultTableProvider extends ProviderBase
         $headers = [];
         $value_customs = [];
         $primary_values = [];
-        foreach ($data as $line_no => $value) {
-            // get header if $line_no == 0
-            if ($line_no == 0) {
-                $headers = $value;
-                continue;
+
+        if (\array_key_exists('get_index', $options)) {
+            $take = $options['take']?? 100;
+            $start_idx = $options['get_index'] * $take;
+            $end_idx = $start_idx + $take;
+            $headers = $data[0];
+            for ($i = max(2, $start_idx); $i < $end_idx; $i++) {
+                if (!\array_key_exists($i, $data)) {
+                    break;
+                }
+                // combine value
+                $value_custom = array_combine($headers, $data[$i]);
+
+                // filter data
+                if ($this->filterData($value_custom)) {
+                    continue;
+                }
+
+                $value_customs[$i] = $value_custom;
+
+                // get primary values
+                $primary_values[] = array_get($value_custom, $this->primary_key);
             }
-            // continue if $line_no == 1
-            elseif ($line_no == 1) {
-                continue;
+        } else {
+            foreach ($data as $line_no => $value) {
+                // get header if $line_no == 0
+                if ($line_no == 0) {
+                    $headers = $value;
+                    continue;
+                }
+                // continue if $line_no == 1
+                elseif ($line_no == 1) {
+                    continue;
+                }
+    
+                // combine value
+                $value_custom = array_combine($headers, $value);
+    
+                // filter data
+                if ($this->filterData($value_custom)) {
+                    continue;
+                }
+    
+                $value_customs[$line_no] = $value_custom;
+    
+                // get primary values
+                $primary_values[] = array_get($value_custom, $this->primary_key);
             }
-
-            // combine value
-            $value_custom = array_combine($headers, $value);
-
-            // filter data
-            if ($this->filterData($value_custom)) {
-                continue;
-            }
-
-            $value_customs[$line_no] = $value_custom;
-
-            // get primary values
-            $primary_values[] = array_get($value_custom, $this->primary_key);
         }
 
         // get all custom value for performance
@@ -103,7 +133,7 @@ class DefaultTableProvider extends ProviderBase
     
     /**
      * validate imported all data.
-     * @param $data
+     * @param mixed $dataObjects
      * @return array
      */
     public function validateImportData($dataObjects)
@@ -118,7 +148,7 @@ class DefaultTableProvider extends ProviderBase
         $error_data = [];
         $success_data = [];
         foreach ($dataObjects as $line_no => $value) {
-            $check = $this->validateDataRow($line_no, $value, $validate_columns);
+            $check = $this->validateDataRow($line_no, $value, $validate_columns, $dataObjects);
             if ($check === true) {
                 $success_data[] = $value;
             } else {
@@ -131,11 +161,13 @@ class DefaultTableProvider extends ProviderBase
     
     /**
      * validate data row
-     * @param $action
-     * @param $data
+     * @param int $line_no
+     * @param array $dataAndModel
+     * @param array $validate_columns
+     * @param array $dataObjects
      * @return array
      */
-    public function validateDataRow($line_no, $dataAndModel, $validate_columns)
+    public function validateDataRow($line_no, $dataAndModel, $validate_columns, $dataObjects)
     {
         $data = array_get($dataAndModel, 'data');
         $model = array_get($dataAndModel, 'model');
@@ -159,6 +191,8 @@ class DefaultTableProvider extends ProviderBase
             $errors[] = sprintf(exmtrans('custom_value.import.import_error_format'), ($line_no+1), $code->getMessage());
         }
 
+        list($uniqueCheckSiblings, $uniqueCheckIgnoreIds) = $this->getUniqueCheckParams($line_no, $dataObjects);
+
         // execute validation
         $validator = $this->custom_table->validateValue(array_dot_reverse($data), $model, [
             'systemColumn' => true,
@@ -166,6 +200,9 @@ class DefaultTableProvider extends ProviderBase
             'appendKeyName' => true,
             'checkCustomValueExists' => false,
             'validateLock' => false,
+            'uniqueCheckSiblings' => $uniqueCheckSiblings,
+            'uniqueCheckIgnoreIds' => $uniqueCheckIgnoreIds,
+            'calledType' => ValidateCalledType::IMPORT,
         ]);
 
         if ($validator->fails()) {
@@ -183,7 +220,31 @@ class DefaultTableProvider extends ProviderBase
     }
 
     /**
-     * @param $data
+     * @param int $current_no
+     * @param array $dataObjects
+     * @return array
+     */
+    protected function getUniqueCheckParams($current_no, $dataObjects)
+    {
+        $siblings = [];
+        $ignoreIds = [];
+        
+        foreach ($dataObjects as $line_no => $value) {
+            if ($line_no != $current_no) {
+                $siblings[] = array_get($value, 'data');
+            }
+            $model = array_get($value, 'model');
+            if (isset($model) && !is_null($id = array_get($model, 'id'))) {
+                $ignoreIds[] =  $id;
+            }
+        }
+        return [$siblings, $ignoreIds];
+    }
+
+    /**
+     *
+     *
+     * @param array $data
      * @return array
      */
     public function dataProcessing($data)
@@ -202,10 +263,13 @@ class DefaultTableProvider extends ProviderBase
         return $data_custom;
     }
 
+    
     /**
      * Data processing before getting model using imported data
      *
-     * @param $data
+     * @param array $data
+     * @param int $line_no
+     * @param array $options
      * @return array
      */
     public function dataProcessingFirst($data, $line_no, $options = [])
@@ -247,11 +311,8 @@ class DefaultTableProvider extends ProviderBase
                 continue;
             }
             // setvalue function if key is value
-            if ($dkey == 'value' && is_array($dvalue)) {
-                // loop dvalue
-                foreach ($dvalue as $dvalueKey => $dvalueValue) {
-                    $model->setValue($dvalueKey, $dvalueValue);
-                }
+            if ($dkey == 'value' && is_list($dvalue)) {
+                $model->setValue($dvalue);
             }
             // if timestamps
             elseif (in_array($dkey, ['created_at', 'updated_at', 'deleted_at'])) {

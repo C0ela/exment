@@ -5,9 +5,8 @@ namespace Exceedone\Exment\Controllers;
 use Encore\Admin\Form;
 use Encore\Admin\Grid;
 use Encore\Admin\Layout\Content;
-//use Encore\Admin\Widgets\Form;
-use Encore\Admin\Widgets\Table;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Exceedone\Exment\Model\CustomColumn;
 use Exceedone\Exment\Model\CustomTable;
 use Exceedone\Exment\Model\CustomCopy;
@@ -24,7 +23,8 @@ class CustomCopyController extends AdminControllerTableBase
     {
         parent::__construct($custom_table, $request);
         
-        $this->setPageInfo(exmtrans("custom_copy.header"), exmtrans("custom_copy.header"), exmtrans("custom_copy.description"), 'fa-copy');
+        $title = exmtrans("custom_copy.header") . ' : ' . ($custom_table ? $custom_table->table_view_name : null);
+        $this->setPageInfo($title, $title, exmtrans("custom_copy.description"), 'fa-copy');
     }
 
     /**
@@ -41,11 +41,15 @@ class CustomCopyController extends AdminControllerTableBase
         return parent::index($request, $content);
     }
 
+    
     /**
-     * Edit interface.
+     * Edit
      *
-     * @param $id
-     * @return Content
+     * @param Request $request
+     * @param Content $content
+     * @param string $tableKey
+     * @param string|int|null $id
+     * @return void|Response
      */
     public function edit(Request $request, Content $content, $tableKey, $id)
     {
@@ -104,13 +108,27 @@ class CustomCopyController extends AdminControllerTableBase
         $grid->actions(function ($actions) {
             $actions->disableView();
         });
+        
+        // filter
+        $grid->filter(function ($filter) {
+            $filter->disableIdFilter();
+
+            $filter->equal('to_custom_table_id', exmtrans("custom_copy.to_custom_table_view_name"))->select(function () {
+                return CustomTable::filterList()->pluck('table_view_name', 'id')->toArray();
+            });
+
+            $filter->exmwhere(function ($query, $input) {
+                $query->where('options->label', 'LIKE', $input . '%');
+            }, exmtrans("plugin.options.label"));
+        });
+
         return $grid;
     }
 
     /**
      * get child table copy options.
      *
-     * @return child copy options
+     * @return array child copy options
      */
     protected function getChildCopyOptions($to_table)
     {
@@ -193,23 +211,23 @@ class CustomCopyController extends AdminControllerTableBase
         $form->hasManyTable('custom_copy_columns', exmtrans("custom_copy.custom_copy_columns"), function ($form) use ($from_custom_column_options, $to_custom_column_options) {
             $form->select('from_column_target', exmtrans("custom_copy.from_custom_column"))
                 ->options($from_custom_column_options)->required();
-            $form->description('▶');
+            $form->descriptionHtml('▶');
             $form->select('to_column_target', exmtrans("custom_copy.to_custom_column"))
                 ->options($to_custom_column_options)->required();
             $form->hidden('copy_column_type')->default(CopyColumnType::DEFAULT);
         })->setTableWidth(10, 1)
-        ->description(exmtrans("custom_copy.column_description"));
+        ->descriptionHtml(exmtrans("custom_copy.column_description"));
 
         ///// get input columns
-        $form->hasManyTable('custom_copy_input_columns', exmtrans("custom_copy.custom_copy_input_columns"), function ($form) use ($from_custom_column_options, $to_custom_column_options) {
+        $form->hasManyTable('custom_copy_input_columns', exmtrans("custom_copy.custom_copy_input_columns"), function ($form) use ($to_custom_column_options) {
             $form->select('to_column_target', exmtrans("custom_copy.input_custom_column"))
                 ->options($to_custom_column_options)->required();
             $form->hidden('copy_column_type')->default(CopyColumnType::INPUT);
         })->setTableWidth(10, 1)
-        ->description(exmtrans("custom_copy.input_column_description"));
+        ->descriptionHtml(exmtrans("custom_copy.input_column_description"));
 
-        $form->tools(function (Form\Tools $tools) use ($id, $form, $custom_table) {
-            $tools->add((new Tools\CustomTableMenuButton('copy', $custom_table))->render());
+        $form->tools(function (Form\Tools $tools) use ($custom_table) {
+            $tools->add(new Tools\CustomTableMenuButton('copy', $custom_table));
         });
 
         // validate before saving

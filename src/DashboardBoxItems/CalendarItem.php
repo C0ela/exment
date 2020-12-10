@@ -76,7 +76,7 @@ class CalendarItem implements ItemInterface
         // create model for getting data --------------------------------------------------
         $model = $this->custom_table->getValueModel()->query();
         // filter model
-        \Exment::user()->filterModel($model, $this->custom_view);
+        $this->custom_view->filterModel($model);
 
         $options = $this->dashboard_box->options;
 
@@ -129,7 +129,7 @@ class CalendarItem implements ItemInterface
                         return array_get($value, 'view_kind_type') == ViewKindType::CALENDAR;
                     })
                     ->filter(function ($value) use ($dashboard) {
-                        if (array_get($dashboard, 'dashboard_type') != DashBoardType::SYSTEM) {
+                        if (array_get($dashboard, 'dashboard_type') != DashboardType::SYSTEM) {
                             return true;
                         }
                         return array_get($value, 'view_type') == ViewType::SYSTEM;

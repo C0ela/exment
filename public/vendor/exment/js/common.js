@@ -19,6 +19,7 @@ var Exment;
                 CommonEvent.setFormFilter($(ev.target));
             });
             $(document).on('click', '.add,.remove', {}, (ev) => {
+                CommonEvent.addSelect2();
                 CommonEvent.setFormFilter($(ev.target));
             });
             $(document).on('switchChange.bootstrapSwitch', '[data-filter],[data-filtertrigger]', {}, (ev) => {
@@ -93,7 +94,7 @@ var Exment;
          */
         static copyScriptEvent(ev) {
             let input = $(ev.target).closest('input');
-            if (input.prop('type') != 'text') {
+            if (input.prop('type') == 'password') {
                 return;
             }
             input.select();
@@ -108,6 +109,13 @@ var Exment;
                 res = res.responseJSON;
             }
             if (res.result === true || res.status === true) {
+                // update value
+                if (hasValue(res.updateValue)) {
+                    for (let key in res.updateValue) {
+                        let updatevalue = res.updateValue[key];
+                        $('.' + key).val(updatevalue);
+                    }
+                }
                 if ($(".modal:visible").length > 0) {
                     $(".modal").off("hidden.bs.modal").on("hidden.bs.modal", function () {
                         // put your default event here
@@ -125,7 +133,9 @@ var Exment;
                 else if (hasValue(res.swal)) {
                     swal(res.swal, (hasValue(res.swaltext) ? res.swaltext : ''), 'success');
                 }
-                $('.modal').modal('hide');
+                if (!hasValue(res.keepModal) || !res.keepModal) {
+                    $('.modal').modal('hide');
+                }
                 if (hasValue(resolve) && !hasValue(res.swal)) {
                     resolve(res);
                 }
@@ -139,8 +149,12 @@ var Exment;
                 else if (hasValue(res.swal)) {
                     swal(res.swal, (hasValue(res.swaltext) ? res.swaltext : ''), 'error');
                 }
-                // if has message, not execute action
+                // if has message, show swal
                 else if (hasValue(res.message)) {
+                    if (swal.isVisible()) {
+                        swal.close();
+                    }
+                    swal($('#exment_error_title').val(), res.message, 'error');
                 }
                 else {
                     Exment.CommonEvent.UndefinedError();
@@ -186,12 +200,15 @@ var Exment;
                 html: null,
                 type: "warning",
                 input: null,
+                inputKey: null,
                 confirm: 'OK',
                 cancel: 'Cancel',
                 method: 'POST',
                 data: [],
                 redirect: null,
-                preConfirmValidate: null
+                preConfirmValidate: null,
+                showCancelButton: true,
+                confirmCallback: null,
             }, options);
             let data = $.extend({
                 _pjax: true,
@@ -204,19 +221,25 @@ var Exment;
             let swalOptions = {
                 title: options.title,
                 type: options.type,
-                showCancelButton: true,
+                showCancelButton: options.showCancelButton,
                 confirmButtonColor: "#DD6B55",
                 confirmButtonText: options.confirm,
                 showLoaderOnConfirm: true,
                 allowOutsideClick: false,
                 cancelButtonText: options.cancel,
                 preConfirm: function (input) {
+                    if (!hasValue(url)) {
+                        return;
+                    }
                     $('.swal2-cancel').hide();
                     if (hasValue(options.preConfirmValidate)) {
                         var result = options.preConfirmValidate(input);
                         if (result !== true) {
                             return result;
                         }
+                    }
+                    if (hasValue(options.inputKey)) {
+                        data[options.inputKey] = input;
                     }
                     return new Promise(function (resolve) {
                         $.ajax({
@@ -225,6 +248,9 @@ var Exment;
                             //container: "#pjax-container",
                             data: data,
                             success: function (repsonse) {
+                                if (hasValue(options.reload)) {
+                                    repsonse.reload = options.reload;
+                                }
                                 if (hasValue(options.redirect)) {
                                     repsonse.redirect = options.redirect;
                                 }
@@ -249,6 +275,10 @@ var Exment;
             }
             swal(swalOptions)
                 .then(function (result) {
+                if (hasValue(options.confirmCallback)) {
+                    options.confirmCallback(result);
+                    return;
+                }
                 var data = result.value;
                 if (typeof data === 'object' && hasValue(data.message)) {
                     let message = data.message;
@@ -469,11 +499,10 @@ var Exment;
          * set getmodel or getitem data to form
          */
         static setModelItem(modeldata, $changedata_target, $elem, options) {
-            var $elem;
             return __awaiter(this, void 0, void 0, function* () {
                 // loop for options
-                for (var i = 0; i < options.length; i++) {
-                    var option = options[i];
+                for (let i = 0; i < options.length; i++) {
+                    let option = options[i];
                     // if has changedata_to_block, get $elem using changedata_to_block
                     if (hasValue(option.to_block)) {
                         $changedata_target = $(option.to_block);
@@ -482,14 +511,15 @@ var Exment;
                             $changedata_target = $changedata_target.find(option.to_block_form).last();
                         }
                     }
-                    $elem = $changedata_target.find(CommonEvent.getClassKey(option.to));
+                    // get element
+                    let $elem = $changedata_target.find(CommonEvent.getClassKey(option.to));
                     if (!hasValue(modeldata)) {
                         yield CommonEvent.setValue($elem, null);
                         //$elem.val('');
                     }
                     else {
                         // get element value from model
-                        var from = modeldata['value'][option.from];
+                        let from = modeldata['value'][option.from];
                         yield CommonEvent.setValue($elem, from);
                     }
                     // view filter execute
@@ -498,15 +528,15 @@ var Exment;
                     option['elem'] = $elem;
                 }
                 // re-loop for options
-                for (var i = 0; i < options.length; i++) {
-                    var option = options[i];
+                for (let i = 0; i < options.length; i++) {
+                    let option = options[i];
                     $elem = option['elem'];
                     ///// execute calc
-                    for (var j = 0; j < CommonEvent.calcDataList.length; j++) {
-                        var calcData = CommonEvent.calcDataList[j];
+                    for (let j = 0; j < CommonEvent.calcDataList.length; j++) {
+                        let calcData = CommonEvent.calcDataList[j];
                         // if calcData.key matches option.to, execute cals
                         if (calcData.key == option.to) {
-                            var $filterTo = $elem.filter(calcData.classKey);
+                            let $filterTo = $elem.filter(calcData.classKey);
                             if (hasValue($filterTo)) {
                                 yield CommonEvent.setCalc($filterTo, calcData.data);
                             }
@@ -588,6 +618,24 @@ var Exment;
                 $d.resolve();
             });
             return $d.promise();
+        }
+        /**
+         * Set linkage expand info for modal search
+         * @param expand
+         * @param $target
+         */
+        static setLinkgaeExpandToSearchButton(expand, $target, linkage_value_id) {
+            let $button = $target.parent().find('[data-widgetmodal_url]');
+            if (!hasValue($button)) {
+                return;
+            }
+            let buttonExpand = $button.data('widgetmodal_expand');
+            if (!hasValue(buttonExpand)) {
+                buttonExpand = {};
+            }
+            expand['linkage_value_id'] = linkage_value_id;
+            buttonExpand['linkage'] = expand;
+            $button.data('widgetmodal_expand', buttonExpand);
         }
         /**
          * set calc
@@ -742,12 +790,16 @@ var Exment;
             if (!hasValue($target)) {
                 return;
             }
-            var column_type = $target.data('column_type');
+            let column_type = $target.data('column_type');
+            // if has data-disable-setvalue, return (For use view only)
+            if (pBool($target.data('disable-setvalue'))) {
+                return;
+            }
             // if 'image' or 'file', cannot setValue, continue
             if ($.inArray(column_type, ['file', 'image']) != -1) {
                 return;
             }
-            var isNumber = $.inArray(column_type, ['integer', 'decimal', 'currency']) != -1;
+            let isNumber = $.inArray(column_type, ['integer', 'decimal', 'currency']) != -1;
             // if number, remove comma
             if (isNumber) {
                 value = rmcomma(value);
@@ -755,14 +807,14 @@ var Exment;
             // if integer, floor value
             if (column_type == 'integer') {
                 if (hasValue(value)) {
-                    var bn = new BigNumber(value);
+                    let bn = new BigNumber(value);
                     value = bn.integerValue().toPrecision();
                 }
             }
             // if 'decimal' or 'currency', floor 
             if ($.inArray(column_type, ['decimal', 'currency']) != -1 && hasValue($target.attr('decimal_digit'))) {
                 if (hasValue(value)) {
-                    var bn = new BigNumber(value);
+                    let bn = new BigNumber(value);
                     value = bn.decimalPlaces(pInt($target.attr('decimal_digit'))).toPrecision();
                 }
             }
@@ -772,8 +824,22 @@ var Exment;
             }
             // switch bootstrapSwitch
             if ($.inArray(column_type, ['boolean', 'yesno']) != -1) {
-                var $bootstrapSwitch = $target.filter('[type="checkbox"]');
+                let $bootstrapSwitch = $target.filter('[type="checkbox"]');
                 $bootstrapSwitch.bootstrapSwitch('toggleReadonly').bootstrapSwitch('state', $bootstrapSwitch.data('onvalue') == value).bootstrapSwitch('toggleReadonly');
+            }
+            // if select2 and has 'data-add-select2-ajax-webapi', call api, and select2 options
+            if ($target.filter('[data-add-select2-ajax-webapi]').length > 0) {
+                let api = URLJoin($target.data('add-select2-ajax-webapi'), value);
+                $.ajax({
+                    type: 'GET',
+                    url: api,
+                    data: { 'label': 1 },
+                    async: false,
+                    success: function (repsonse) {
+                        let newOption = new Option(repsonse.label, repsonse.id, true, true);
+                        $target.append(newOption);
+                    }
+                });
             }
             // set value
             $target.val(value).trigger('change');
@@ -797,6 +863,7 @@ var Exment;
                             return {
                                 q: params.term,
                                 page: params.page,
+                                expand: $elem.data('add-select2-expand'),
                             };
                         },
                         processResults: function (data, params) {
@@ -831,10 +898,12 @@ var Exment;
         static addFieldEvent() {
             $('[data-add-date]').not('.added-datepicker').each(function (index, elem) {
                 $(elem).datetimepicker({ "useCurrent": false, "format": "YYYY-MM-DD", "locale": "ja", "allowInputToggle": true });
-            }).addClass('added-datepicker');
+                $(elem).addClass('added-datepicker');
+            });
             $('[data-add-icheck]').not('.added-icheck').each(function (index, elem) {
                 $(elem).iCheck({ checkboxClass: 'icheckbox_minimal-blue' });
-            }).addClass('added-icheck');
+                $(elem).addClass('added-icheck');
+            });
         }
         static getFilterVal($parent, a) {
             // get filter object
@@ -903,6 +972,18 @@ var Exment;
             var url = link.url;
             var expand = link.expand;
             var $target = $parent.find(CommonEvent.getClassKey(link.to));
+            // if has 'widgetmodal_expand' on button, append linkage_value_id
+            CommonEvent.setLinkgaeExpandToSearchButton(expand, $target, $base.val());
+            // if target has 'data-add-select2-ajax'(Call as ajax), set data to $target, and not call linkage
+            if (hasValue($target.data('add-select2-ajax'))) {
+                let select2_expand = $target.data('add-select2-expand');
+                if (!hasValue(select2_expand)) {
+                    select2_expand = {};
+                }
+                select2_expand['linkage_value_id'] = $base.val();
+                $target.data('add-select2-expand', select2_expand).val(null).trigger("change");
+                continue;
+            }
             CommonEvent.linkage($target, url, $base.val(), expand);
         }
     };
@@ -935,7 +1016,7 @@ var Exment;
                     $getdata = CommonEvent.getParentRow($parent);
                 }
                 let key = g.key;
-                let $target = $parent.find(CommonEvent.getClassKey(key));
+                let $target = $getdata.find(CommonEvent.getClassKey(key));
                 expand[key] = $target.val();
             }
         }
@@ -959,29 +1040,31 @@ var Exment;
      */
     CommonEvent.setFormFilter = ($target) => {
         $target = CommonEvent.getParentRow($target).find('[data-filter]');
-        for (var tIndex = 0; tIndex < $target.length; tIndex++) {
-            var $t = $target.eq(tIndex);
+        for (let tIndex = 0; tIndex < $target.length; tIndex++) {
+            let $t = $target.eq(tIndex);
             // Get parent element of that input
-            var $parent = CommonEvent.getParentRow($t);
+            let $parent = CommonEvent.getParentRow($t);
             // Get parent element with row
-            var $eParent = $t.parents('.form-group');
+            let $eParent = $t.parents('.form-group');
             // Get search target key and value
             try {
-                var array = $t.data('filter');
+                let array = $t.data('filter');
                 // if not array, convert array
                 if (!Array.isArray(array)) {
                     array = [array];
                 }
-                var isShow = true;
-                var isReadOnly = false;
-                for (var index = 0; index < array.length; index++) {
-                    var a = array[index];
+                // check isshow, isReadOnly, isRequired(default is null:not toggle)
+                let isShow = true;
+                let isReadOnly = false;
+                let isRequired = null;
+                for (let index = 0; index < array.length; index++) {
+                    let a = array[index];
                     // Get value of class with that key
                     // if has parent value
-                    var parentCount = a.parent ? a.parent : 0;
+                    let parentCount = a.parent ? a.parent : 0;
                     if (parentCount > 0) {
-                        var $calcParent = $parent;
-                        for (var i = 0; i < parentCount; i++) {
+                        let $calcParent = $parent;
+                        for (let i = 0; i < parentCount; i++) {
                             $calcParent = CommonEvent.getParentRow($calcParent);
                         }
                         var filterVal = CommonEvent.getFilterVal($calcParent, a);
@@ -1020,6 +1103,10 @@ var Exment;
                             isReadOnly = true;
                         }
                     }
+                    // change isrequired
+                    if (isRequired === null && a.requiredValue) {
+                        isRequired = CommonEvent.findValue(filterVal, a.requiredValue);
+                    }
                 }
                 if (isShow) {
                     $eParent.show();
@@ -1039,7 +1126,7 @@ var Exment;
                     //$t.val('');
                 }
                 // if selectbox, disabled
-                var propName = $t.prop('type') == 'select-one' || $t.prop('tagName').toLowerCase() == 'select'
+                const propName = $t.prop('type') == 'select-one' || $t.prop('tagName').toLowerCase() == 'select'
                     ? 'disabled' : 'readonly';
                 if (isReadOnly) {
                     $t.prop(propName, true);
@@ -1047,6 +1134,18 @@ var Exment;
                 else {
                     if (propName != 'disabled' || isShow) {
                         $t.prop(propName, false);
+                    }
+                }
+                // toggle required
+                if (isRequired !== null) {
+                    $t.prop('required', isRequired);
+                    // find label
+                    let $label = $eParent.find('label');
+                    if (isRequired) {
+                        $label.addClass('asterisk');
+                    }
+                    else {
+                        $label.removeClass('asterisk');
                     }
                 }
             }
@@ -1103,6 +1202,13 @@ const pInt = (obj) => {
     }
     obj = obj.toString().replace(/,/g, '');
     return parseInt(obj);
+};
+const pBool = (obj) => {
+    if (!hasValue(obj)) {
+        return false;
+    }
+    const booleanStr = obj.toString().toLowerCase();
+    return booleanStr === "true" || booleanStr === "1";
 };
 const hasValue = (obj) => {
     if (obj == null || obj == undefined || obj.length == 0) {

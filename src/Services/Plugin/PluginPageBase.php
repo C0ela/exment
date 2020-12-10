@@ -10,7 +10,7 @@ namespace Exceedone\Exment\Services\Plugin;
  */
 class PluginPageBase extends PluginPublicBase
 {
-    use PluginPageTrait;
+    use PluginBase, PluginPageTrait;
 
     protected $showHeader = true;
 
@@ -32,7 +32,7 @@ class PluginPageBase extends PluginPublicBase
     /**
      * Get route uri for page
      *
-     * @return void
+     * @return string
      */
     public function getRouteUri($endpoint = null)
     {

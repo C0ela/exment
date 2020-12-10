@@ -4,6 +4,7 @@ namespace Exceedone\Exment\Services\Auth2factor;
 
 use Exceedone\Exment\Notifications\MailSender;
 use Exceedone\Exment\Model\System;
+use Exceedone\Exment\Model\CustomValue;
 use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Enums\UserSetting;
 use Exceedone\Exment\Enums\Login2FactorProviderType;
@@ -87,12 +88,39 @@ class Auth2factorService
      *
      * @param string $verify_type
      * @param string $verify_code
-     * @param bool $matchDelete if true, remove match records
+     * @param \Carbon\Carbon $valid_period_datetime
+     * @param string|CustomValue $mail_template
+     * @param array $mail_prms
      * @return bool
      */
     public static function addAndSendVerify($verify_type, $verify_code, $valid_period_datetime, $mail_template, $mail_prms = [])
     {
-        $loginuser = \Admin::user();
+        static::addVerify($verify_type, $verify_code, $valid_period_datetime);
+
+        // send mail
+        try {
+            static::sendVerify($mail_template, $mail_prms);
+
+            return true;
+        }
+        // throw mailsend Exception
+        catch (\Swift_TransportException $ex) {
+            \Log::error($ex);
+            return false;
+        }
+    }
+    
+    /**
+     * Add database
+     *
+     * @param string $verify_type
+     * @param string $verify_code
+     * @param \Carbon\Carbon $valid_period_datetime
+     * @return bool
+     */
+    protected static function addVerify($verify_type, $verify_code, $valid_period_datetime)
+    {
+        $loginuser = \Exment::user();
 
         // set database
         \DB::table(SystemTableName::EMAIL_CODE_VERIFY)
@@ -106,21 +134,29 @@ class Auth2factorService
                 ]
             );
 
-        // send mail
-        try {
-            MailSender::make($mail_template, $loginuser->email)
-                ->prms($mail_prms)
-                ->user($loginuser)
-                ->disableHistoryBody()
-                ->send();
-
-            return true;
-        }
-        // throw mailsend Exception
-        catch (\Swift_TransportException $ex) {
-            return false;
-        }
+        return true;
     }
+    
+    /**
+     * Send verify
+     *
+     * @param string|CustomValue $mail_template
+     * @param array $mail_prms
+     * @return MailSender
+     */
+    protected static function sendVerify($mail_template, $mail_prms = []) : MailSender
+    {
+        $loginuser = \Admin::user();
+
+        // send mail
+        $sender = MailSender::make($mail_template, $loginuser->email)
+            ->prms($mail_prms)
+            ->user($loginuser)
+            ->disableHistoryBody();
+        $sender->send();
+        return $sender;
+    }
+
 
     public static function deleteCode($verify_type, $verify_code)
     {

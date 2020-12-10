@@ -44,7 +44,7 @@ class WorkflowController extends AdminControllerBase
 
     protected $exists = false;
 
-    public function __construct(Request $request)
+    public function __construct()
     {
         $this->setPageInfo(exmtrans("workflow.header"), exmtrans("workflow.header"), exmtrans("workflow.description"), 'fa-share-alt');
     }
@@ -61,20 +61,20 @@ class WorkflowController extends AdminControllerBase
         $grid->column('workflow_type', exmtrans("workflow.workflow_type"))->displayEscape(function ($v) {
             return WorkflowType::getEnum($v)->transKey('workflow.workflow_type_options');
         });
-        $grid->column('workflow_tables', exmtrans("custom_table.table"))->displayEscape(function ($v) {
-            if (is_null($custom_table = $this->getDesignatedTable())) {
+        $grid->column('workflow_tables', exmtrans("custom_table.table"))->displayEscape(function ($v, $column, $model) {
+            if (is_null($custom_table = $model->getDesignatedTable())) {
                 return null;
             }
 
             return $custom_table->table_view_name;
         });
         $grid->column('workflow_view_name', exmtrans("workflow.workflow_view_name"))->sortable();
-        $grid->column('workflow_statuses', exmtrans("workflow.status_name"))->displayEscape(function ($value) {
-            return $this->getStatusesString();
+        $grid->column('workflow_statuses', exmtrans("workflow.status_name"))->displayEscape(function ($value, $column, $workflow) {
+            return $workflow->getStatusesString();
         });
         $grid->column('setting_completed_flg', exmtrans("workflow.setting_completed_flg"))->display(function ($value) {
             if (boolval($value)) {
-                return getTrueMark($value);
+                return \Exment::getTrueMark($value);
             }
 
             return null;
@@ -109,6 +109,18 @@ class WorkflowController extends AdminControllerBase
                     'btn_class' => 'btn-primary',
                 ]));
             }
+            $tools->prepend(new Tools\SystemChangePageMenu());
+        });
+
+        $grid->filter(function ($filter) {
+            $filter->disableIdFilter();
+            $filter->equal('workflow_type', exmtrans("workflow.workflow_type"))->select(function ($val) {
+                return WorkflowType::transKeyArray('workflow.workflow_type_options');
+            });
+
+            $filter->like('workflow_view_name', exmtrans("workflow.workflow_view_name"));
+
+            $filter->equal('setting_completed_flg', exmtrans("workflow.setting_completed_flg"))->radio(\Exment::getYesNoAllOption());
         });
 
         return $grid;
@@ -132,7 +144,7 @@ class WorkflowController extends AdminControllerBase
             case 2:
                 return $this->actionForm($id);
             case 3:
-                return $this->beginningForm($id);
+                return $this->beginningForm();
             default:
                 return $this->statusForm($id);
         }
@@ -160,7 +172,7 @@ class WorkflowController extends AdminControllerBase
         $form = new Form(new Workflow);
         $form->progressTracker()->options($this->getProgressInfo($workflow, 1));
 
-        $form->description(exmtrans('common.help.more_help'));
+        $form->descriptionHtml(exmtrans('common.help.more_help'));
 
         $form->text('workflow_view_name', exmtrans("workflow.workflow_view_name"))
             ->required()
@@ -189,6 +201,7 @@ class WorkflowController extends AdminControllerBase
         else {
             $form->display('workflow_type', exmtrans('workflow.workflow_type'))
                 ->displayText(WorkflowType::getEnum($workflow->workflow_type)->transKey('workflow.workflow_type_options'))
+                ->escape(false)
                 ;
 
             if ($workflow->workflow_type == WorkflowType::TABLE) {
@@ -214,18 +227,18 @@ class WorkflowController extends AdminControllerBase
             $field->disableOptions();
         } else {
             $field->rowUpDown('order')
-                ->description(sprintf(exmtrans("workflow.description_workflow_statuses")));
+                ->descriptionHtml(sprintf(exmtrans("workflow.description_workflow_statuses")));
         }
         
         $form->saving(function (Form $form) {
             $this->exists = $form->model()->exists;
         });
 
-        $form->savedInTransaction(function (Form $form) use ($id) {
+        $form->savedInTransaction(function (Form $form) {
             $model = $form->model();
 
             // get workflow_statuses and set completed fig
-            $statuses = $model->workflow_statuses()->orderby('order', 'desc')->get();
+            $statuses = $model->workflow_statuses()->get()->sortByDesc('order')->values();
 
             foreach ($statuses as $index => $status) {
                 $status->completed_flg = ($index === 0);
@@ -248,12 +261,13 @@ class WorkflowController extends AdminControllerBase
 
         $self = $this;
         $form->tools(function (Form\Tools $tools) use ($self, $workflow) {
+            $tools->append(new Tools\SystemChangePageMenu());
             $self->appendActivateButton($workflow, $tools);
             $self->appendTableSettingButton($workflow, $tools);
             $self->disableDelete($workflow, $tools);
         });
 
-        $form->saved(function (Form $form) use ($id) {
+        $form->saved(function (Form $form) {
             $model = $form->model();
 
             // redirect workflow action page
@@ -264,6 +278,22 @@ class WorkflowController extends AdminControllerBase
                 return redirect($workflow_action_url);
             }
         });
+
+        if (isset($workflow)) {
+            $form->submitRedirect([
+                'value' => 'action_2',
+                'label' => exmtrans('common.redirect_to', exmtrans('workflow.workflow_actions')),
+                'redirect' => function ($resourcesPath, $key) {
+                    return redirect(admin_urls('workflow', $key, 'edit?action=2'));
+                },
+            ])->submitRedirect([
+                'value' => 1,
+                'label' => trans('admin.continue_editing'),
+                'redirect' => function ($resourcesPath, $key) {
+                    return redirect(admin_urls('workflow', $key, 'edit?action=1'));
+                },
+            ]);
+        }
 
         return $form;
     }
@@ -280,7 +310,7 @@ class WorkflowController extends AdminControllerBase
         $form = new Form(new Workflow);
         $form->progressTracker()->options($this->getProgressInfo($workflow, 2));
 
-        $form->description(exmtrans('common.help.more_help'));
+        $form->descriptionHtml(exmtrans('common.help.more_help'));
 
         $form->hidden('action')->default(2);
         $form->display('workflow_view_name', exmtrans("workflow.workflow_view_name"));
@@ -301,8 +331,8 @@ class WorkflowController extends AdminControllerBase
         $field = $form->hasManyTable('workflow_actions', exmtrans("workflow.workflow_actions"), function ($form) use ($id, $workflow) {
             $form->workflowStatusSelects('status_from', exmtrans("workflow.status_name"))
                 ->config('allowClear', false)
-                ->options(function ($value, $field) {
-                    return $this->getStatusOptions($field->getIndex() === 0);
+                ->options(function ($value, $field, $workflow) {
+                    return $workflow->getStatusOptions($field->getIndex() === 0);
                 });
 
             $form->valueModal('work_conditions', exmtrans("workflow.work_conditions"))
@@ -402,6 +432,7 @@ class WorkflowController extends AdminControllerBase
 
         $self = $this;
         $form->tools(function (Form\Tools $tools) use ($self, $workflow) {
+            $tools->append(new Tools\SystemChangePageMenu());
             $self->appendActivateButton($workflow, $tools);
             $self->appendTableSettingButton($workflow, $tools);
             $self->disableDelete($workflow, $tools);
@@ -415,6 +446,20 @@ class WorkflowController extends AdminControllerBase
                 return $result;
             }
         });
+
+        $form->submitRedirect([
+            'value' => 'action_1',
+            'label' => exmtrans('common.redirect_to', exmtrans('workflow.workflow_statuses')),
+            'redirect' => function ($resourcesPath, $key) {
+                return redirect(admin_urls('workflow', $key, 'edit?action=1'));
+            },
+        ])->submitRedirect([
+            'value' => 1,
+            'label' => trans('admin.continue_editing'),
+            'redirect' => function ($resourcesPath, $key) {
+                return redirect(admin_urls('workflow', $key, 'edit?action=2'));
+            },
+        ]);
 
         return $form;
     }
@@ -506,7 +551,7 @@ class WorkflowController extends AdminControllerBase
         }
 
         // add form
-        $form->description(exmtrans('workflow.help.beginning') . '<br />' . exmtrans('common.help.more_help'));
+        $form->descriptionHtml(exmtrans('workflow.help.beginning') . '<br />' . exmtrans('common.help.more_help'));
 
         $form->html(view('exment::workflow.beginning', [
             'items' => $results
@@ -518,6 +563,7 @@ class WorkflowController extends AdminControllerBase
             'label' => trans('admin.list'),
             'icon' => 'fa-list',
         ])->render());
+        $box->tools(new Tools\SystemChangePageMenu());
 
         $content->row($box);
         return $content;
@@ -536,6 +582,9 @@ class WorkflowController extends AdminControllerBase
         $validator = \Validator::make($request->all(), [
             'workflow_tables.*.workflows.*.active_start_date' => ['nullable', 'date', 'before_or_equal:workflow_tables.*.workflows.*.active_end_date'],
             'workflow_tables.*.workflows.*.active_end_date' => ['nullable', 'date']
+        ], [], [
+            'workflow_tables.*.workflows.*.active_start_date' => exmtrans('workflow.active_start_date'),
+            'workflow_tables.*.workflows.*.active_end_date' => exmtrans('workflow.active_end_date'),
         ]);
 
         $errors = $validator->errors();
@@ -686,11 +735,11 @@ class WorkflowController extends AdminControllerBase
         $notify->notify_view_name = exmtrans('notify.notify_trigger_options.workflow');
         $notify->notify_trigger = NotifyTrigger::WORKFLOW;
         $notify->workflow_id = $workflow->id;
-        $notify->notify_actions = NotifyAction::SHOW_PAGE;
-        $notify->action_settings = [
-            'mail_template_id' => $mail_template->id,
+        $notify->mail_template_id = $mail_template->id;
+        $notify->action_settings = [[
+            'notify_action' => NotifyAction::SHOW_PAGE,
             'notify_action_target' =>  [NotifyActionTarget::WORK_USER]
-        ];
+        ]];
         $notify->save();
     }
 
@@ -843,7 +892,7 @@ class WorkflowController extends AdminControllerBase
         $index = $request->get('index');
 
         $form = AuthUserOrgHelper::getUserOrgModalForm($custom_table, $value, [
-            'prependCallback' => function ($form) use ($workflow, $value, $index) {
+            'prependCallback' => function ($form) use ($value, $index) {
                 if ($index > 0) {
                     $options = [
                         WorkflowWorkTargetType::ACTION_SELECT => WorkflowWorkTargetType::ACTION_SELECT()->transKey('workflow.work_target_type_options'),
@@ -878,7 +927,7 @@ class WorkflowController extends AdminControllerBase
         // set workflow system column
         $modal_system_default = array_get($value, SystemTableName::SYSTEM()->lowerkey());
         if (!isset($modal_system_default)) {
-            $modal_system_default = (!isset($value) && $index == 0 ? [WorkflowTargetSystem::CREATED_USER] : null);
+            $modal_system_default = (is_nullorempty($value) && $index == 0 ? [WorkflowTargetSystem::CREATED_USER] : null);
         }
         $form->multipleSelect('modal_' . ConditionTypeDetail::SYSTEM()->lowerkey(), exmtrans('common.system'))
             ->options(WorkflowTargetSystem::transKeyArray('common'))
@@ -920,7 +969,7 @@ class WorkflowController extends AdminControllerBase
         $form = new ModalForm($value);
 
         if (isset($workflow_type)) {
-            $form->description(exmtrans('workflow.help.work_conditions_' . $workflow_type->lowerKey()))
+            $form->descriptionHtml(exmtrans('workflow.help.work_conditions_' . $workflow_type->lowerKey()))
                 ->setWidth(10, 2);
         }
 
@@ -1013,7 +1062,7 @@ class WorkflowController extends AdminControllerBase
         $form = new ModalForm();
         $form->action($activatePath);
 
-        $form->description(exmtrans('workflow.help.setting_complete'));
+        $form->descriptionHtml(exmtrans('workflow.help.setting_complete'));
 
         $form->text('activate_keyword', exmtrans('common.keyword'))
             ->required()

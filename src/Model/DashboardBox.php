@@ -11,7 +11,7 @@ use Exceedone\Exment\Enums\ViewKindType;
 class DashboardBox extends ModelBase implements Interfaces\TemplateImporterInterface
 {
     use Traits\AutoSUuidTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\TemplateTrait;
     use Traits\UseRequestSessionTrait;
     
@@ -99,23 +99,6 @@ class DashboardBox extends ModelBase implements Interfaces\TemplateImporterInter
         return $this->belongsTo(Dashboard::class, 'dashboard_id');
     }
     
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    public function forgetOption($key)
-    {
-        return $this->forgetJson('options', $key);
-    }
-    public function clearOption()
-    {
-        return $this->clearJson('options');
-    }
-    
     public function getDashboardBoxItemAttribute()
     {
         $enum_class = DashboardBoxType::getEnum($this->dashboard_box_type)->getDashboardBoxItemClass();
@@ -134,7 +117,7 @@ class DashboardBox extends ModelBase implements Interfaces\TemplateImporterInter
     /**
      * Get box html arrtibute. For
      *
-     * @return void
+     * @return array
      */
     public function getBoxHtmlAttr() : array
     {
@@ -159,7 +142,7 @@ class DashboardBox extends ModelBase implements Interfaces\TemplateImporterInter
 
         // get dashboard value
         $view_column = CustomViewSummary::getSummaryViewColumn(array_get($this, $key));
-        if (!isset($view_column)) {
+        if (is_nullorempty($view_column)) {
             return [
                 'table_name' => null,
                 'column_name' => null,

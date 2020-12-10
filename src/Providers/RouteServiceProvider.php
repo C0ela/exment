@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Routing\Router;
 use Exceedone\Exment\Model\Define;
-use Exceedone\Exment\Model\File;
 use Exceedone\Exment\Model\System;
+use Exceedone\Exment\Model\LoginSetting;
 use Exceedone\Exment\Enums\ApiScope;
 use Exceedone\Exment\Enums\SystemTableName;
 
@@ -44,7 +44,7 @@ class RouteServiceProvider extends ServiceProvider
         Route::group([
             'prefix'        => config('admin.route.prefix'),
             'namespace'     => $this->namespace,
-            'middleware'    => config('admin.route.middleware'),
+            'middleware'    => ['adminweb', 'admin'],
         ], function (Router $router) {
             $router->get('/', 'DashboardController@home');
             $router->get('dashboardbox/html/{suuid}', 'DashboardBoxController@getHtml');
@@ -52,6 +52,8 @@ class RouteServiceProvider extends ServiceProvider
             $router->resource('dashboard', 'DashboardController');
             $router->get("dashboardbox/table_views/{dashboard_type}", 'DashboardBoxController@tableViews');
             $router->get("dashboardbox/chart_axis/{axis_type}", 'DashboardBoxController@chartAxis');
+            $router->get("dashboard/{id}/shareClick", 'DashboardController@shareClick');
+            $router->post("dashboard/{id}/sendShares", 'DashboardController@sendShares');
             $router->resource('dashboardbox', 'DashboardBoxController');
         
             $router->resource('auth/logs', 'LogController', ['except' => ['create', 'edit']]);
@@ -65,8 +67,6 @@ class RouteServiceProvider extends ServiceProvider
             $router->get('system/update', 'SystemController@updatePackage');
             $router->put('system/filedelete', 'SystemController@filedelete');
             $router->get('system/version', 'SystemController@version');
-            $router->post('system/2factor-verify', 'SystemController@auth_2factor_verify');
-            $router->post('system/2factor', 'SystemController@post2factor');
             $router->post('system/send_testmail', 'SystemController@sendTestMail');
             
             $router->get('template', 'TemplateController@index');
@@ -79,24 +79,49 @@ class RouteServiceProvider extends ServiceProvider
                 return redirect(admin_url('template'));
             });
             
+            $router->post('notify/setting', 'NotifyController@postNotifySetting');
             $router->get('notify/targetcolumn', 'NotifyController@targetcolumn');
             $router->get('notify/notify_action_target', 'NotifyController@notify_action_target');
             $router->get('notify/notify_action_target_workflow', 'NotifyController@notify_action_target_workflow');
             $router->post('notify/notifytrigger_template', 'NotifyController@getNotifyTriggerTemplate');
-            $router->resource('notify', 'NotifyController', ['except' => ['show']]);
+            $router->resource('notify', 'NotifyController');
+            $router->post("notify_navbar/batchAll/{type}", 'NotifyNavbarController@batchAll');
             $router->resource('notify_navbar', 'NotifyNavbarController', ['except' => ['edit']]);
             $router->get("notify_navbar/rowdetail/{id}", 'NotifyNavbarController@redirectTargetData');
             $router->post("notify_navbar/rowcheck/{id}", 'NotifyNavbarController@rowCheck');
-
-            $router->resource('api_setting', 'ApiSettingController', ['except' => ['show']]);
-            $router->resource('plugin', 'PluginController', ['except' => ['show']]);
-            $router->resource('role_group', 'RoleGroupController', ['except' => ['show']]);
-            $router->resource('table', 'CustomTableController', ['except' => ['show']]);
-            $router->get('table/menuModal/{id}', 'CustomTableController@menuModal');
             
-            $router->resource('workflow', 'WorkflowController', ['except' => ['show']]);
+            $router->post('login_setting/{id}/activate', 'LoginSettingController@activate')->name('exment.login_activate');
+            $router->post('login_setting/{id}/deactivate', 'LoginSettingController@deactivate')->name('exment.login_deactivate');
+            $router->get('login_setting/{id}/testModal', 'LoginSettingController@loginTestModal')->name('exment.logintest_modal');
+            $router->post('login_setting/{id}/testForm', 'LoginSettingController@loginTestForm')->name('exment.logintest_form');
+            $router->get('login_setting/{id}/testSso', 'LoginSettingController@loginTestSso')->name('exment.logintest_sso');
+            $router->get('login_setting/{id}/testcallback', 'LoginSettingController@loginTestCallback')->name('exment.logintest_callback');
+            $router->post('login_setting/{id}/testcallback', 'LoginSettingController@loginTestCallback')->name('exment.logintest_acs');
+            $router->post('login_setting/2factor-verify', 'LoginSettingController@auth_2factor_verify')->name('exment.2factor_verify');
+            $router->post('login_setting/2factor', 'LoginSettingController@post2factor')->name('exment.post2factor');
+            $router->post('login_setting/postglobal', 'LoginSettingController@postGlobal')->name('exment.postglobal');
+
+            $router->get('plugin/edit_code/{id}/getTree', 'PluginCodeController@getTreeData');
+            $router->get('plugin/edit_code/{id}/selectFile', 'PluginCodeController@getFileEditForm');
+            $router->post('plugin/edit_code/{id}/fileupload', 'PluginCodeController@fileupload');
+            $router->get('plugin/edit_code/{id}', 'PluginCodeController@edit');
+            $router->post('plugin/edit_code/{id}', 'PluginCodeController@store');
+            $router->delete('plugin/edit_code/{id}', 'PluginCodeController@delete');
+            $router->get('plugin/{id}/executeBatch', 'PluginController@executeBatch');
+
+            $router->get('table/menuModal/{id}', 'CustomTableController@menuModal');
+
             $router->get("workflow/beginning", 'WorkflowController@beginningForm');
             $router->post("workflow/beginning", 'WorkflowController@beginningPost');
+
+            $this->setResouce($router, 'login_setting', 'LoginSettingController');
+            $this->setResouce($router, 'api_setting', 'ApiSettingController');
+            $this->setResouce($router, 'plugin', 'PluginController');
+            $this->setResouce($router, 'role_group', 'RoleGroupController');
+            $this->setResouce($router, 'table', 'CustomTableController');
+            $this->setResouce($router, 'workflow', 'WorkflowController');
+
+
             $router->post('workflow/{id}/modal/target', 'WorkflowController@targetModal');
             $router->post('workflow/{id}/modal/condition', 'WorkflowController@conditionModal');
             $router->get("workflow/{id}/filter-value", 'WorkflowController@getFilterValue');
@@ -112,6 +137,7 @@ class RouteServiceProvider extends ServiceProvider
             });
             
             $router->get('search', 'SearchController@index');
+            $router->get('search/lists', 'SearchController@getLists');
             $router->get('search/list', 'SearchController@getList');
             $router->get('search/header', 'SearchController@header');
             $router->get('search/relation', 'SearchController@getRelationList');
@@ -122,16 +148,20 @@ class RouteServiceProvider extends ServiceProvider
             $router->post('backup/save', 'BackupController@save');
             $router->post('backup/setting', 'BackupController@postSetting');
             $router->post('backup/import', 'BackupController@import');
+            $router->post('backup/editname', 'BackupController@editname');
             $router->get('backup/importModal', 'BackupController@importModal');
+            $router->get('backup/importModal/{file_key}', 'BackupController@importModal');
             $router->get('backup/download/{ymdhms}', 'BackupController@download');
         
             $router->get("data/{tableKey}/importModal", 'CustomValueController@importModal');
             $router->post("data/{tableKey}/import", 'CustomValueController@import');
             $router->post("data/{tableKey}/pluginClick", 'CustomValueController@pluginClick');
+            $router->post("data/{tableKey}/operationClick", 'CustomValueController@operationClick');
             $router->get("data/{tableKey}/{id}/compare", 'CustomValueController@compare');
             $router->get("data/{tableKey}/{id}/compareitem", 'CustomValueController@compareitem');
             $router->post("data/{tableKey}/{id}/compare", 'CustomValueController@restoreRevision');
             $router->post("data/{tableKey}/{id}/pluginClick", 'CustomValueController@pluginClick');
+            $router->post("data/{tableKey}/{id}/operationClick", 'CustomValueController@operationClick');
             $router->get("data/{tableKey}/{id}/actionModal", 'CustomValueController@actionModal');
             $router->post("data/{tableKey}/{id}/actionClick", 'CustomValueController@actionClick');
             $router->get("data/{tableKey}/{id}/notifyClick", 'CustomValueController@notifyClick');
@@ -147,24 +177,29 @@ class RouteServiceProvider extends ServiceProvider
             $router->put("data/{tableKey}/{id}/filedelete", 'CustomValueController@filedelete');
             $router->post("data/{tableKey}/{id}/fileupload", 'CustomValueController@fileupload');
             $router->post("data/{tableKey}/{id}/addcomment", 'CustomValueController@addComment');
-            $router->post("data/{tableKey}/{id}/rowUpdate/{rowid}", 'CustomValueController@rowUpdate');
+            $router->delete("data/{tableKey}/{id}/deletecomment/{suuid}", 'CustomValueController@deleteComment');
 
             $router->get("view/{tableKey}/filter-condition", 'CustomViewController@getFilterCondition');
             $router->get("view/{tableKey}/summary-condition", 'CustomViewController@getSummaryCondition');
             $router->get("view/{tableKey}/group-condition", 'CustomViewController@getGroupCondition');
-            $router->get("view/{tableKey}/filter-value", 'CustomViewController@getFilterValue');
+            $router->get("view/{tableKey}/{id}/shareClick", 'CustomViewController@shareClick');
+            $router->post("view/{tableKey}/{id}/sendShares", 'CustomViewController@sendShares');
 
             $router->post("column/{tableKey}/calcModal", 'CustomColumnController@calcModal');
             $router->post("column/{tableKey}/{id}/calcModal", 'CustomColumnController@calcModal');
             $router->get("copy/{tableKey}/newModal", 'CustomCopyController@newModal');
 
             $router->get("operation/{tableKey}/filter-value", 'CustomOperationController@getFilterValue');
-        
+            $router->get('form/{tableKey}/relationFilterModal', 'CustomFormController@relationFilterModal');
+
             $router->get('files/{uuid}', 'FileController@download');
             $router->get('files/{tableKey}/{uuid}', 'FileController@downloadTable');
-            
+
             $router->delete('files/{uuid}', 'FileController@delete');
             $router->delete('files/{tableKey}/{uuid}', 'FileController@deleteTable');
+            
+            $router->post('tmpfiles', 'FileController@uploadTempFile');
+            $router->get('tmpfiles/{uuid}', 'FileController@downloadTempFile');
             
             $this->setTableResouce($router, 'data', 'CustomValueController', true);
             $this->setTableResouce($router, 'column', 'CustomColumnController');
@@ -182,6 +217,8 @@ class RouteServiceProvider extends ServiceProvider
 
             $router->get("webapi/{tableKey}/filter-condition", 'ApiTableController@getFilterCondition');
             $router->get("webapi/{tableKey}/filter-value", 'ApiTableController@getFilterValue');
+            $router->get("webapi/{tableKey}/operation-update-type", 'ApiTableController@getOperationUpdateType');
+            $router->get("webapi/{tableKey}/operation-filter-value", 'ApiTableController@getOperationFilterValue');
         });
     }
 
@@ -191,12 +228,13 @@ class RouteServiceProvider extends ServiceProvider
         Route::group([
             'prefix'        => config('admin.route.prefix'),
             'namespace'     => $this->namespace,
-            'middleware'    => ['web', 'admin_anonymous'],
+            'middleware'    => ['adminweb', 'admin_anonymous'],
         ], function (Router $router) {
             $router->get('initialize', 'InitializeController@index');
             $router->post('initialize', 'InitializeController@post');
             $router->put('initialize/filedelete', 'InitializeController@filedelete');
-            $router->get('auth/login', 'AuthController@getLoginExment');
+            $router->get('auth/login', 'AuthController@getLoginExment')->name('exment.login');
+            $router->get('auth/logout', 'AuthController@getLogout')->name('exment.logout');
             $router->post('auth/login', 'AuthController@postLogin');
             $router->get('auth/forget', 'ForgetPasswordController@showLinkRequestForm');
             $router->post('auth/forget', 'ForgetPasswordController@sendResetLinkEmail')->name('password.email');
@@ -204,14 +242,32 @@ class RouteServiceProvider extends ServiceProvider
             $router->post('auth/reset/{token}', 'ResetPasswordController@reset')->name('password.request');
             $router->get('auth/change', 'ChangePasswordController@showChangeForm');
             $router->post('auth/change', 'ChangePasswordController@change');
-            $router->get('favicon', 'FileController@downloadFavicon');
 
             // get config about login provider
-            $login_providers = config('exment.login_providers');
-            if (!is_nullorempty($login_providers)) {
-                $router->get('auth/login/{provider}', 'AuthController@getLoginProvider');
-                $router->get('auth/login/{provider}/callback', 'AuthController@callbackLoginProvider');
+            if (canConnection() && hasTable(SystemTableName::LOGIN_SETTINGS)) {
+                if (LoginSetting::getOAuthSettings()->count() > 0) {
+                    $router->get('auth/login/{provider}', 'AuthOAuthController@getLoginProvider');
+                    $router->get('auth/login/{provider}/callback', 'AuthOAuthController@callback');
+                }
+                // get config about login provider
+                if (LoginSetting::getSamlSettings()->count() > 0) {
+                    $router->get('saml/logout', 'AuthSamlController@sls')->name('exment.saml_sls');
+                    $router->get('saml/login/{provider}', 'AuthSamlController@login')->name('exment.saml_login');
+                    $router->get('saml/login/{provider}/metadata', 'AuthSamlController@metadata');
+                    $router->post('saml/login/{provider}/acs', 'AuthSamlController@acs')->name('exment.saml_acs');
+                }
             }
+        });
+
+
+        Route::group([
+            'prefix'        => config('admin.route.prefix'),
+            'namespace'     => $this->namespace,
+            'middleware'    => ['adminweb', 'admin_anonymous_simple'],
+        ], function (Router $router) {
+            $router->get('favicon', 'FileController@downloadFavicon');
+            $router->get('auth/login/background', 'FileController@downloadLoginBackground');
+            $router->get('auth/login/header', 'FileController@downloadLoginHeader');
         });
     }
     
@@ -220,7 +276,7 @@ class RouteServiceProvider extends ServiceProvider
         Route::group([
             'prefix'        => config('admin.route.prefix'),
             'namespace'     => $this->namespace,
-            'middleware'    => ['web', 'admin_install'],
+            'middleware'    => ['adminweb', 'admin_install'],
         ], function (Router $router) {
             $router->get('install', 'InstallController@index');
             $router->post('install', 'InstallController@post');
@@ -231,7 +287,7 @@ class RouteServiceProvider extends ServiceProvider
     {
         // define adminapi(for webapi), api(for web)
         $routes = [
-            ['type' => 'webapi', 'prefix' => url_join(config('admin.route.prefix'), 'webapi'), 'middleware' => ['web', 'adminwebapi'], 'addScope' => false],
+            ['type' => 'webapi', 'prefix' => url_join(config('admin.route.prefix'), 'webapi'), 'middleware' => ['adminweb', 'adminwebapi'], 'addScope' => false],
         ];
         
         if (canConnection() && hasTable(SystemTableName::SYSTEM) && System::api_available()) {
@@ -245,18 +301,22 @@ class RouteServiceProvider extends ServiceProvider
                 'middleware'    => array_get($route, 'middleware'),
             ], function (Router $router) use ($route) {
                 // value --------------------------------------------------
-                $router->get("data/{tableKey}", 'ApiTableController@dataList')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/query-column", 'ApiTableController@dataQueryColumn')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/query", 'ApiTableController@dataQuery')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/select", 'ApiTableController@dataSelect')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/relatedLinkage", 'ApiTableController@relatedLinkage')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/calendar", 'ApiTableController@calendarList')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/{id}", 'ApiTableController@dataFind')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->post("data/{tableKey}/{id}", 'ApiTableController@dataFind')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->post("data/{tableKey}", 'ApiTableController@dataCreate')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
-                $router->put("data/{tableKey}/{id}", 'ApiTableController@dataUpdate')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
-                $router->delete("data/{tableKey}/{id}", 'ApiTableController@dataDelete')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
-                $router->get("data/{tableKey}/column/{column_name}", 'ApiTableController@columnData')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}", 'ApiDataController@dataList')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/query-column", 'ApiDataController@dataQueryColumn')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/query", 'ApiDataController@dataQuery')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/select", 'ApiDataController@dataSelect')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/relatedLinkage", 'ApiDataController@relatedLinkage')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/calendar", 'ApiDataController@calendarList')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/{id}", 'ApiDataController@dataFind')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->post("data/{tableKey}/{id}", 'ApiDataController@dataFind')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->post("data/{tableKey}", 'ApiDataController@dataCreate')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
+                $router->put("data/{tableKey}/{id}", 'ApiDataController@dataUpdate')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
+                $router->delete("data/{tableKey}/{id}", 'ApiDataController@dataDelete')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
+                $router->get("data/{tableKey}/column/{column_name}", 'ApiDataController@columnData')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+
+                // viewdata ----------------------------------------------------
+                $router->get("viewdata/{tableKey}/{viewid}", 'ApiDataController@viewDataList')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->get("viewdata/{tableKey}/{viewid}/{id}", 'ApiDataController@viewDataFind')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
 
 
                 // file, document --------------------------------------------------
@@ -265,8 +325,8 @@ class RouteServiceProvider extends ServiceProvider
                 $router->delete('files/{uuid}', 'FileController@deleteApi')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
                 $router->delete('files/{tableKey}/{uuid}', 'FileController@deleteTableApi')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
 
-                $router->get("document/{tableKey}/{id}", 'ApiTableController@getDocuments')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
-                $router->post("document/{tableKey}/{id}", 'ApiTableController@createDocument')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
+                $router->get("document/{tableKey}/{id}", 'ApiDataController@getDocuments')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_READ, ApiScope::VALUE_WRITE));
+                $router->post("document/{tableKey}/{id}", 'ApiDataController@createDocument')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VALUE_WRITE));
 
 
                 // table --------------------------------------------------
@@ -275,9 +335,13 @@ class RouteServiceProvider extends ServiceProvider
                 $router->get("table/indexcolumns", 'ApiController@indexcolumns')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
                 $router->get("table/filterviews", 'ApiController@filterviews')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
                 $router->get("table/{tableKey}", 'ApiController@table')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
+                
+                // column,view --------------------------------------------------
                 $router->get("table/{tableKey}/columns", 'ApiTableController@tableColumns')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
                 $router->get("table/{tableKey}/column/{columnKey}", 'ApiTableController@tableColumn')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
+                $router->get("table/{tableKey}/views", 'ApiTableController@views')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VIEW_READ));
                 $router->get("column/{id}", 'ApiController@column')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
+                $router->get("view/{id}", 'ApiController@view')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::VIEW_READ));
                 $router->get("target_table/columns/{id}", 'ApiController@targetBelongsColumns')->middleware(ApiScope::getScopeString($route['addScope'], ApiScope::TABLE_READ));
                 
                 // System --------------------------------------------------
@@ -316,7 +380,7 @@ class RouteServiceProvider extends ServiceProvider
     {
         // define adminapi(for webapi), api(for web)
         $routes = [
-            ['prefix' => url_join(config('admin.route.prefix'), 'webapi'), 'middleware' => ['web', 'adminapi_anonymous']],
+            ['prefix' => url_join(config('admin.route.prefix'), 'webapi'), 'middleware' => ['adminweb', 'adminapi_anonymous']],
             ['prefix' => url_join(config('admin.route.prefix'), 'api'), 'middleware' => ['api', 'adminapi_anonymous']],
         ];
         
@@ -325,7 +389,7 @@ class RouteServiceProvider extends ServiceProvider
                 'prefix' => array_get($route, 'prefix'),
                 'namespace'     => $this->namespace,
                 'middleware'    => array_get($route, 'middleware'),
-            ], function (Router $router) use ($route) {
+            ], function (Router $router) {
                 $router->post('template/search', 'TemplateController@searchTemplate');
                 $router->delete('template/delete', 'TemplateController@delete');
             });
@@ -338,16 +402,32 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function setTableResouce($router, $endpointName, $controllerName, $isShow = false)
     {
-        $router->get("{$endpointName}/{tableKey}", "$controllerName@index");
-        $router->get("{$endpointName}/{tableKey}/create", "$controllerName@create");
-        $router->post("{$endpointName}/{tableKey}", "$controllerName@store");
-        $router->get("{$endpointName}/{tableKey}/{id}/edit", "$controllerName@edit");
-        $router->put("{$endpointName}/{tableKey}/{id}", "$controllerName@update");
+        $router->get("{$endpointName}/{tableKey}", "$controllerName@index")->name("exment.$endpointName.index");
+        $router->get("{$endpointName}/{tableKey}/create", "$controllerName@create")->name("exment.$endpointName.create");
+        $router->post("{$endpointName}/{tableKey}", "$controllerName@store")->name("exment.$endpointName.store");
+        $router->get("{$endpointName}/{tableKey}/{id}/edit", "$controllerName@edit")->name("exment.$endpointName.edit");
+        $router->put("{$endpointName}/{tableKey}/{id}", "$controllerName@update")->name("exment.$endpointName.update");
         $router->patch("{$endpointName}/{tableKey}/{id}", "$controllerName@update");
-        $router->delete("{$endpointName}/{tableKey}/{id}", "$controllerName@destroy");
+        $router->delete("{$endpointName}/{tableKey}/{id}", "$controllerName@destroy")->name("exment.$endpointName.destroy");
+        $router->get("{$endpointName}/{tableKey}/{id}", "$controllerName@show")->name("exment.$endpointName.show");
+    }
+    
+    /**
+     * set resource.
+     * (Set names simply)
+     */
+    protected function setResouce($router, $endpointName, $controllerName, $isShow = false)
+    {
+        $names = [
+            'index' => "exment.$endpointName.index",
+            'create' => "exment.$endpointName.create",
+            'store' => "exment.$endpointName.store",
+            'edit' => "exment.$endpointName.edit",
+            'update' => "exment.$endpointName.update",
+            'delete' => "exment.$endpointName.delete",
+            'show' => "exment.$endpointName.show",
+        ];
 
-        if ($isShow) {
-            $router->get("{$endpointName}/{tableKey}/{id}", "$controllerName@show");
-        }
+        $router->resource($endpointName, $controllerName)->names($names);
     }
 }

@@ -6,9 +6,11 @@ use Exceedone\Exment\Enums\ColumnType;
 use Exceedone\Exment\Enums\RelationType;
 use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Model\CustomRelation;
+use Illuminate\Database\Eloquent\Collection;
 
 class DefaultTableSettingProvider extends ProviderBase
 {
+    protected $custom_table;
     protected $custom_columns;
     protected $outputs = [];
 
@@ -104,7 +106,7 @@ class DefaultTableSettingProvider extends ProviderBase
     /**
      * get setting target columns
      *
-     * @return void
+     * @return \Illuminate\Support\Collection
      */
     protected static function getTargetColumns($custom_table)
     {
@@ -112,5 +114,11 @@ class DefaultTableSettingProvider extends ProviderBase
         return $custom_table->custom_columns()
             ->whereIn('column_type', ColumnType::COLUMN_TYPE_IMPORT_REPLACE())
             ->get();
+    }
+
+
+    public function getRecords() : Collection
+    {
+        return new Collection;
     }
 }

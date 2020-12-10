@@ -2,25 +2,28 @@
 
 namespace Exceedone\Exment\Model;
 
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Collection;
 use Encore\Admin\Facades\Admin;
 use Exceedone\Exment\ColumnItems\CustomItem;
 use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Enums\RelationType;
 use Exceedone\Exment\Enums\NotifySavedType;
 use Exceedone\Exment\Enums\ColumnType;
-use Exceedone\Exment\Enums\FilterSearchType;
 use Exceedone\Exment\Enums\ValueType;
 use Exceedone\Exment\Enums\FormActionType;
 use Exceedone\Exment\Enums\ErrorCode;
 use Exceedone\Exment\Enums\JoinedOrgFilterType;
 use Exceedone\Exment\Enums\Permission;
 use Exceedone\Exment\Enums\PluginEventTrigger;
+use Exceedone\Exment\Enums\ShareTrigger;
+use Exceedone\Exment\Enums\UrlTagType;
+use Exceedone\Exment\Enums\CustomOperationType;
 
 abstract class CustomValue extends ModelBase
 {
     use Traits\AutoSUuidTrait,
     Traits\DatabaseJsonTrait,
-    Traits\HasDynamicRelationTrait,
     \Illuminate\Database\Eloquent\SoftDeletes,
     \Exceedone\Exment\Revisionable\RevisionableTrait;
 
@@ -59,6 +62,12 @@ abstract class CustomValue extends ModelBase
      * get label only first time.
      */
     protected $_label;
+
+    /**
+     * file uuids.
+     * *NOW only use edtitor images
+     */
+    protected $file_uuids = [];
 
 
     /**
@@ -194,6 +203,13 @@ abstract class CustomValue extends ModelBase
         })->implode('');
     }
 
+    // value_authoritable. it's all role data.
+    public function custom_value_authoritables()
+    {
+        return $this->hasMany(CustomValueAuthoritable::class, 'parent_id')
+            ->where('parent_type', $this->custom_table_name);
+    }
+
     // user value_authoritable. it's all role data. only filter morph_type
     public function value_authoritable_users()
     {
@@ -210,6 +226,20 @@ abstract class CustomValue extends ModelBase
             ->withPivot('authoritable_target_id', 'authoritable_user_org_type', 'authoritable_type')
             ->wherePivot('authoritable_user_org_type', SystemTableName::ORGANIZATION)
             ;
+    }
+
+
+    /**
+     * Get dynamic relation value for custom value.
+     *
+     * @param int $custom_relation_id
+     * @param boolean $isCallAsParent
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany | \Illuminate\Database\Eloquent\Relations\MorphMany | \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function getDynamicRelationValue(int $custom_relation_id, bool $isCallAsParent)
+    {
+        $relation = CustomRelation::getEloquent($custom_relation_id);
+        return $relation->getDynamicRelationValue($this, $isCallAsParent);
     }
 
 
@@ -277,7 +307,7 @@ abstract class CustomValue extends ModelBase
     /**
      * get workflow histories
      *
-     * @return void
+     * @return Collection
      */
     public function getWorkflowHistories($appendsStatus = false)
     {
@@ -318,6 +348,21 @@ abstract class CustomValue extends ModelBase
         return $this;
     }
 
+    /**
+     * get or set file_uuids
+     */
+    public function file_uuids($key = null)
+    {
+        // get
+        if (!isset($key)) {
+            return $this->file_uuids;
+        }
+
+        // set
+        $this->file_uuids[] = $key;
+        return $this;
+    }
+
     public function saved_notify($disable_saved_notify)
     {
         $this->saved_notify = $disable_saved_notify;
@@ -335,14 +380,18 @@ abstract class CustomValue extends ModelBase
         parent::boot();
 
         static::saving(function ($model) {
-            // re-get field data --------------------------------------------------
-            $model->prepareValue();
+            $events = $model->exists ? CustomOperationType::UPDATE : CustomOperationType::CREATE;
+            // call create or update trigger operations
+            CustomOperation::operationExecuteEvent($events, $model);
 
             // call saving trigger plugins
             Plugin::pluginExecuteEvent(PluginEventTrigger::SAVING, $model->custom_table, [
                 'custom_table' => $model->custom_table,
                 'custom_value' => $model,
             ]);
+
+            // re-get field data --------------------------------------------------
+            $model->prepareValue();
 
             // prepare revision
             $model->preSave();
@@ -355,7 +404,7 @@ abstract class CustomValue extends ModelBase
         });
 
         static::deleting(function ($model) {
-            $model->deleted_user_id = \Exment::user()->getUserId();
+            $model->deleted_user_id = \Exment::getUserId();
 
             // saved_notify(as update) disable
             $saved_notify = $model->saved_notify;
@@ -395,7 +444,7 @@ abstract class CustomValue extends ModelBase
     /**
      * Call saved event
      *
-     * @param [type] $isCreate
+     * @param bool $isCreate
      * @return void
      */
     protected function savedEvent($isCreate)
@@ -419,15 +468,24 @@ abstract class CustomValue extends ModelBase
             // save Authoritable
             CustomValueAuthoritable::setValueAuthoritable($this);
 
+            // save external Authoritable
+            CustomValueAuthoritable::setValueAuthoritableEx($this, ShareTrigger::CREATE);
+
             // send notify
             $this->notify(NotifySavedType::CREATE);
  
             // set revision
             $this->postCreate();
         } else {
-            // send notify
-            $this->notify(NotifySavedType::UPDATE);
+            // Only call already_updated is false
+            if (!$this->already_updated) {
+                // save external Authoritable
+                CustomValueAuthoritable::setValueAuthoritableEx($this, ShareTrigger::UPDATE);
 
+                // send notify
+                $this->notify(NotifySavedType::UPDATE);
+            }
+            
             // set revision
             $this->postSave();
         }
@@ -440,22 +498,25 @@ abstract class CustomValue extends ModelBase
      * @param array $input laravel-admin input
      * @return mixed
      */
-    public function validatorSaving($input, bool $asApi = false)
+    public function validateSaving($input, array $options = [])
     {
-        $options = [
-            'asApi' => $asApi,
+        $options = array_merge([
+            'asApi' => false,
             'appendErrorAllColumn' => true,
-        ];
+            'column_name_prefix' => null,
+            'uniqueCheckSiblings' => [], // unique validation Siblings
+            'calledType' => null, // Whether this validation is called.
+        ], $options);
 
         // validate multiple column set is unique
-        $errors = $this->custom_table->validatorMultiUniques($input, $this, $options);
+        $errors = $this->custom_table->validatorUniques($input, $this, $options);
 
         $errors = array_merge($this->custom_table->validatorCompareColumns($input, $this, $options), $errors);
 
-        $errors = array_merge($this->custom_table->validatorLock($input, $this, $asApi), $errors);
+        $errors = array_merge($this->custom_table->validatorLock($input, $this, $options['asApi']), $errors);
 
         // call plugin validator
-        $errors = array_merge_recursive($errors, $this->custom_table->validatorPlugin($input, $this));
+        $errors = array_merge_recursive($errors, $this->custom_table->validatorPlugin($input, $this, ['called_type' => $options['calledType']]));
 
         return count($errors) > 0 ? $errors : true;
     }
@@ -470,7 +531,7 @@ abstract class CustomValue extends ModelBase
         $value = $this->value;
         $original = json_decode($this->getOriginal('value'), true);
         // get  columns
-        $custom_columns = $this->custom_table->custom_columns;
+        $custom_columns = $this->custom_table->custom_columns_cache;
 
         // loop columns
         $update_flg = false;
@@ -565,8 +626,7 @@ abstract class CustomValue extends ModelBase
         }
 
         $columns = $this->custom_table
-            ->custom_columns
-            ->all();
+            ->custom_columns_cache;
 
         $update_flg = false;
         // loop columns
@@ -666,27 +726,61 @@ abstract class CustomValue extends ModelBase
      */
     public function getAuthoritable($related_type)
     {
+        // check request session for grid.
+        $key = sprintf(Define::SYSTEM_KEY_SESSION_GRID_AUTHORITABLE, $this->custom_table->id);
+        $reqSessions = System::requestSession($key);
+
+        // If already getting, filter value.
+        if (!is_null($reqSessions)) {
+            return $reqSessions->filter(function ($value) use ($related_type) {
+                $value = (array)$value;
+                if ($value['authoritable_user_org_type'] != $related_type) {
+                    return false;
+                }
+                if ($value['parent_id'] != $this->id) {
+                    return false;
+                }
+
+                // check has user or org id
+                if ($related_type == SystemTableName::USER) {
+                    return $value['authoritable_target_id'] == \Exment::getUserId();
+                } elseif ($related_type == SystemTableName::ORGANIZATION) {
+                    $enum = JoinedOrgFilterType::getEnum(System::org_joined_type_custom_value(), JoinedOrgFilterType::ONLY_JOIN);
+                    return in_array($value['authoritable_target_id'], \Exment::user()->getOrganizationIds($enum));
+                }
+            });
+        }
+
+        // if not get before, now get.
         if ($related_type == SystemTableName::USER) {
             $query = $this
             ->value_authoritable_users()
-            ->where('authoritable_target_id', \Exment::user()->getUserId());
+            ->where('authoritable_target_id', \Exment::getUserId());
         } elseif ($related_type == SystemTableName::ORGANIZATION) {
             $enum = JoinedOrgFilterType::getEnum(System::org_joined_type_custom_value(), JoinedOrgFilterType::ONLY_JOIN);
             $query = $this
                 ->value_authoritable_organizations()
                 ->whereIn('authoritable_target_id', \Exment::user()->getOrganizationIds($enum));
+        } else {
+            throw new \Exception;
         }
 
         return $query->get();
     }
 
+    /**
+     * Set value for custom column.
+     *
+     * @param string|array|Collection $key
+     * @param mixed $val if $key is string, set value
+     * @param boolean $forgetIfNull if true, and val is null, remove DB's column from "value".
+     * @return $this
+     */
     public function setValue($key, $val = null, $forgetIfNull = false)
     {
-        $custom_columns = CustomColumn::allRecords(function ($custom_column) {
-            return $custom_column->custom_table_id == $this->custom_table->id;
-        });
+        $custom_columns = $this->custom_table->custom_columns_cache;
 
-        if (is_array($key)) {
+        if (is_list($key)) {
             $key = collect($key)->filter(function ($item, $itemkey) use ($custom_columns) {
                 return $custom_columns->contains(function ($rec) use ($itemkey) {
                     return $rec->column_name == $itemkey;
@@ -700,6 +794,47 @@ abstract class CustomValue extends ModelBase
                 return $this;
             }
         }
+        
+        return $this->setJson('value', $key, $val, $forgetIfNull);
+    }
+
+    /**
+     * Set value for custom column, strictly.
+     * (1) Execute validation before set value.
+     * If validate is failed, throw exception.
+     * (2) Set value.
+     *
+     * @param array|Collection $list custom value's list(array or collection)
+     * @param boolean $forgetIfNull if true, and val is null, remove DB's column from "value".
+     * @throws ValidationException validation error
+     * @return $this
+     */
+    public function setValueStrictly($list, $forgetIfNull = false)
+    {
+        // validation value
+        $validator = $this->custom_table->validateValue(toArray($list), $this, [
+            'appendKeyName' => false,
+            'checkCustomValueExists' => true,
+            'checkUnnecessaryColumn' => true,
+        ]);
+
+        if ($validator->fails()) {
+            throw new ValidationException($validator);
+        }
+        
+        return $this->setValue($list, null, $forgetIfNull);
+    }
+
+    /**
+     * Set value for custom column, not check custom column contains.
+     *
+     * @param string|array|Collection $key
+     * @param mixed $val if $key is string, set value
+     * @param boolean $forgetIfNull if true, and val is null, remove DB's column from "value".
+     * @return $this
+     */
+    public function setValueDirectly($key, $val = null, $forgetIfNull = false)
+    {
         return $this->setJson('value', $key, $val, $forgetIfNull);
     }
 
@@ -713,7 +848,7 @@ abstract class CustomValue extends ModelBase
         $custom_table = $this->custom_table;
         $values = [];
 
-        foreach ($custom_table->custom_columns as $custom_column) {
+        foreach ($custom_table->custom_columns_cache as $custom_column) {
             $values[$custom_column->column_name] = $this->getValue($custom_column, $label, $options);
         }
         return $values;
@@ -721,6 +856,7 @@ abstract class CustomValue extends ModelBase
 
     public function getValue($column, $label = false, $options = [])
     {
+        $time_start = microtime(true);
         if (is_null($column)) {
             return null;
         }
@@ -789,6 +925,7 @@ abstract class CustomValue extends ModelBase
 
         $item->options($options);
 
+
         // get value
         // using ValueType
         $valueType = ValueType::getEnum($label);
@@ -804,7 +941,6 @@ abstract class CustomValue extends ModelBase
 
     /**
      * Get vustom_value's label
-     * @param CustomValue $custom_value
      * @return string
      */
     public function getLabel()
@@ -830,7 +966,7 @@ abstract class CustomValue extends ModelBase
         $custom_table = $this->custom_table;
 
         if (!isset($label_columns) || count($label_columns) == 0) {
-            $columns = [$custom_table->custom_columns->first()];
+            $columns = [$custom_table->custom_columns_cache->first()];
         } else {
             $columns = $label_columns->map(function ($label_column) {
                 return CustomColumn::getEloquent($label_column->table_label_id);
@@ -911,6 +1047,7 @@ abstract class CustomValue extends ModelBase
                 'add_avatar' => false,
                 'only_avatar' => false,
                 'asApi' => false,
+                'blank' => false,
             ],
             $options
         );
@@ -924,9 +1061,10 @@ abstract class CustomValue extends ModelBase
             if (!$tag) {
                 return $url;
             }
-            $label = esc_html($document_name);
-            $title = exmtrans('common.download');
-            return "<a href='$url' target='_blank' data-toggle='tooltip' title='$title'>$label</a>";
+                
+            return \Exment::getUrlTag($url, $document_name, UrlTagType::BLANK, [], [
+                'tooltipTitle' => exmtrans('common.download')
+            ]);
         }
         $url = admin_urls('data', $this->custom_table->table_name);
         if (!boolval($options['list'])) {
@@ -939,41 +1077,41 @@ abstract class CustomValue extends ModelBase
         if (!$tag) {
             return $url;
         }
-        if (isset($options['icon'])) {
-            $label = '<i class="fa ' . $options['icon'] . '" aria-hidden="true"></i>';
-        } else {
-            $label = esc_html($this->getLabel());
-        }
 
-        if (boolval($options['modal'])) {
-            $url .= '?modal=1';
-            $href = 'javascript:void(0);';
-            $widgetmodal_url = sprintf(" data-widgetmodal_url='$url' data-toggle='tooltip' title='%s'", exmtrans('custom_value.data_detail'));
+        $attributes = [];
+        $escape = true;
+
+        if (isset($options['icon'])) {
+            $label = '<i class="fa ' . esc_html($options['icon']) . '" aria-hidden="true"></i>';
+            $escape = false;
         } else {
-            $href = $url;
-            $widgetmodal_url = null;
+            $label = $this->getLabel();
         }
 
         if (boolval($options['add_id'])) {
-            $widgetmodal_url .= " data-id='{$this->id}'";
+            $attributes['data-id'] = $this->id;
         }
 
         if (!is_nullorempty($label) && (boolval($options['add_avatar']) || boolval($options['only_avatar'])) && method_exists($this, 'getDisplayAvatarAttribute')) {
             $img = "<img src='{$this->display_avatar}' class='user-avatar' />";
-            $label = '<span class="d-inline-block user-avatar-block">' . $img . $label . '</span>';
+            $label = '<span class="d-inline-block user-avatar-block">' . $img . esc_html($label) . '</span>';
+            $escape = false;
 
             if (boolval($options['only_avatar'])) {
                 return $label;
             }
         }
 
-        return "<a href='$href'$widgetmodal_url>$label</a>";
+        $urlType = boolval($options['modal']) ? UrlTagType::MODAL : UrlTagType::TOP;
+        return \Exment::getUrlTag($url, $label, $urlType, $attributes, [
+            'notEscape' => !$escape,
+        ]);
     }
 
     /**
      * Get document list
      *
-     * @return void
+     * @return Collection
      */
     public function getDocuments($options = [])
     {
@@ -1017,7 +1155,7 @@ abstract class CustomValue extends ModelBase
      */
     public function mergeValue($value)
     {
-        foreach ($this->custom_table->custom_columns as $custom_column) {
+        foreach ($this->custom_table->custom_columns_cache as $custom_column) {
             $column_name = $custom_column->column_name;
             // if not key in value, set default value
             if (!array_has($value, $column_name)) {
@@ -1084,7 +1222,7 @@ abstract class CustomValue extends ModelBase
         $child_table = CustomTable::getEloquent($relation);
         $pivot_table_name = CustomRelation::getRelationNameByTables($this->custom_table, $child_table);
 
-        if (isset($pivot_table_name)) {
+        if (!is_nullorempty($pivot_table_name)) {
             return $returnBuilder ? $this->{$pivot_table_name}() : $this->{$pivot_table_name};
         }
 
@@ -1105,66 +1243,97 @@ abstract class CustomValue extends ModelBase
     }
 
     /**
-     * Get Query for text search
+     * Get Query for text search.
      *
-     * @return void
+     * @return \Illuminate\Database\Eloquent\Builder
      */
     public function getSearchQuery($q, $options = [])
     {
         $options = $this->getQueryOptions($q, $options);
-        extract($options);
+        $searchColumns = $options['searchColumns'];
 
-        if (empty($searchColumns)) {
-            // return null if searchColumns is not has
-            return null;
+
+        // if search and not has searchColumns, return null;
+        if ($options['executeSearch'] && empty($searchColumns)) {
+            // return no value if searchColumns is not has
+            return static::query()->whereRaw('1 = 0');
         }
+
+        $getQueryFunc = function ($searchColumn, $options) {
+            $takeCount = $options['takeCount'];
+
+            $queries = [];
+            // if not search, set only pure query
+            if (!$options['executeSearch']) {
+                $query = static::query();
+                //$query->take($takeCount);
+                $queries[] = $query;
+            } elseif ($searchColumn instanceof CustomColumn) {
+                $column_item = $searchColumn->column_item;
+                if (!isset($column_item)) {
+                    return;
+                }
+
+                foreach ($column_item->getSearchQueries($options['mark'], $options['value'], $takeCount, $options['q'], $options) as $query) {
+                    $query->take($takeCount);
+                    $queries[] = $query;
+                }
+            } else {
+                $query = static::query();
+                $query->whereOrIn($searchColumn, $options['mark'], $options['value'])->select('id');
+                $query->take($takeCount);
+    
+                $queries[] = $query;
+            }
+            
+            foreach ($queries as &$query) {
+                // if has relationColumn, set query filtering
+                if (isset($options['relationColumn'])) {
+                    $options['relationColumn']->setQueryFilter($query, array_get($options, 'relationColumnValue'));
+                }
+                
+                ///// if has display table, filter display table
+                if (isset($options['display_table'])) {
+                    $this->custom_table->filterDisplayTable($query, $options['display_table'], $options);
+                }
+
+                // set custom view's filter
+                if (isset($options['target_view'])) {
+                    $options['target_view']->filterModel($query, ['sort' => false]);
+                }
+            }
+
+            return $queries;
+        };
 
         // crate union query
         $queries = [];
         $searchColumns = collect($searchColumns);
         for ($i = 0; $i < count($searchColumns) - 1; $i++) {
             $searchColumn = collect($searchColumns)->values()->get($i);
-            if ($searchColumn instanceof CustomColumn) {
-                $column_item = $searchColumn->column_item;
-                if (!isset($column_item)) {
-                    continue;
-                }
 
-                foreach ($column_item->getSearchQueries($mark, $value, $takeCount, $q) as $query) {
-                    $queries[] = $query;
-                }
-            } else {
-                $query = static::query();
-                $query->where($searchColumn, $mark, $value)->select('id');
-                $query->take($takeCount);
-    
+            foreach ($getQueryFunc($searchColumn, $options) as $query) {
                 $queries[] = $query;
             }
         }
 
         $searchColumn = $searchColumns->last();
+        $subquery = $getQueryFunc($searchColumn, $options)[0];
 
-        if ($searchColumn instanceof CustomColumn) {
-            $column_item = $searchColumn->column_item;
-            if (!isset($column_item)) {
-                $subquery = static::query();
-            } else {
-                $subquery = $column_item->getSearchQueries($mark, $value, $takeCount, $q)[0];
-            }
-        } else {
-            $subquery = static::query();
-            $subquery->where($searchColumn, $mark, $value)->select('id');
-        }
-
-        $subquery->take($takeCount);
         foreach ($queries as $inq) {
             $subquery->union($inq);
         }
+        //$subquery->take($takeCount);
+
+        if ($options['searchDocument'] && boolval(config('exment.search_document', false))) {
+            $subquery->union(\Exment::getSearchDocumentQuery($this->custom_table, $q)->select('id'));
+        }
 
         // create main query
-        $mainQuery = \DB::query()->fromSub($subquery, 'sub');
+        // $mainQuery = \DB::query()->fromSub($subquery, 'sub');
 
-        return $mainQuery;
+        // return $mainQuery;
+        return $subquery;
     }
 
     /**
@@ -1176,10 +1345,8 @@ abstract class CustomValue extends ModelBase
     {
         $options = $this->getQueryOptions($q, $options);
 
-        $query->where(function ($query) use ($options) {
-            extract($options);
-
-            $searchColumns = collect($searchColumns);
+        $query->where(function ($query) use ($options, $q) {
+            $searchColumns = collect($options['searchColumns']);
             for ($i = 0; $i < count($searchColumns); $i++) {
                 $searchColumn = $searchColumns->values()->get($i);
 
@@ -1189,10 +1356,16 @@ abstract class CustomValue extends ModelBase
                         continue;
                     }
                         
-                    $column_item->setSearchOrWhere($query, $mark, $value, $q);
+                    $column_item->setSearchOrWhere($query, $options['mark'], $options['value'], $options['q']);
                 } else {
-                    $query->orWhere($searchColumn, $mark, $value);
+                    $query->orWhere($searchColumn, $options['mark'], $options['value']);
                 }
+            }
+
+            if ($options['searchDocument'] && boolval(config('exment.search_document', false))) {
+                $query->orWhere(function ($query) use ($q) {
+                    \Exment::getSearchDocumentQuery($this->custom_table, $q, $query);
+                });
             }
         });
     }
@@ -1202,7 +1375,7 @@ abstract class CustomValue extends ModelBase
      *
      * @param string $q search text
      * @param array $options
-     * @return void
+     * @return array query option for search.
      */
     protected function getQueryOptions($q, $options = [])
     {
@@ -1214,39 +1387,41 @@ abstract class CustomValue extends ModelBase
                 'makeHidden' => false,
                 'searchColumns' => null,
                 'relation' => false,
+                'executeSearch' => true, // if true, search $q . If false,  not filter.
+                'searchDocument' => false, // is search document.
+
+                // append default
+                'takeCount' => null,
+                'mark' => null,
+                'value' => null,
+                'q' => $q,
             ],
             $options
         );
-        extract($options);
 
         // if selected target column,
-        if (is_null($searchColumns)) {
-            $searchColumns = $this->custom_table->getSearchEnabledColumns();
+        if (!isset($options['searchColumns'])) {
+            $options['searchColumns'] = $this->custom_table->getFreewordSearchColumns();
         }
 
-        if (!isset($searchColumns) || count($searchColumns) == 0) {
+        if (!isset($options['searchColumns']) || count($options['searchColumns']) == 0) {
             return $options;
         }
 
-        if (System::filter_search_type() == FilterSearchType::ALL) {
-            $value = ($isLike ? '%' : '') . $q . ($isLike ? '%' : '');
-        } else {
-            $value = $q . ($isLike ? '%' : '');
-        }
-        $mark = ($isLike ? 'LIKE' : '=');
+        list($mark, $value) = $this->getQueryMarkAndValue($options['isLike'], $q, $options['relation']);
 
-        if ($relation) {
+        if (boolval($options['relation'])) {
             $takeCount = intval(config('exment.keyword_search_relation_count', 5000));
         } else {
             $takeCount = intval(config('exment.keyword_search_count', 1000));
         }
 
         // if not paginate, only take maxCount
-        if (!$paginate) {
-            $takeCount = is_null($maxCount) ? $takeCount : min($takeCount, $maxCount);
+        if (!boolval($options['paginate'])) {
+            $takeCount = !isset($options['maxCount']) ? $takeCount : min($takeCount, $options['maxCount']);
         }
 
-        $options['searchColumns'] = $searchColumns;
+        //$options['searchColumns'] = $searchColumns;
         $options['takeCount'] = $takeCount;
         $options['mark'] = $mark;
         $options['value'] = $value;
@@ -1256,9 +1431,38 @@ abstract class CustomValue extends ModelBase
     }
 
     /**
+     * Get mark and value for search
+     *
+     * @param bool $isLike
+     * @param string $q search string
+     * @return array
+     */
+    protected function getQueryMarkAndValue($isLike, $q, bool $relation)
+    {
+        // if relation search, return always "=" and $q
+        if ($relation) {
+            return ["=", $q];
+        }
+
+        return \Exment::getQueryMarkAndValue($isLike, $q);
+    }
+
+    /**
+     * Set CustomValue's model for request session.
+     *
+     */
+    public function setValueModel()
+    {
+        $key = sprintf(Define::SYSTEM_KEY_SESSION_CUSTOM_VALUE_VALUE, $this->custom_table_name, $this->id);
+        System::setRequestSession($key, $this);
+
+        return $this;
+    }
+
+    /**
      * Is locked by workflow
      *
-     * @return void
+     * @return bool is lock this data.
      */
     public function lockedWorkflow()
     {
@@ -1278,7 +1482,7 @@ abstract class CustomValue extends ModelBase
     /**
      * User can access this custom value
      *
-     * @return void
+     * @return bool|ErrorCode
      */
     public function enableAccess()
     {
@@ -1296,21 +1500,27 @@ abstract class CustomValue extends ModelBase
     /**
      * User can edit this custom value
      *
-     * @return void
+     * @param bool $checkFormAction if true, check as display
+     * @return bool|ErrorCode
      */
     public function enableEdit($checkFormAction = false)
     {
-        if (($code = $this->custom_table->enableEdit($checkFormAction)) !== true) {
-            return $code;
+        // Deleted to address the case where users with view authority are sharing data
+        // if (($code = $this->custom_table->enableEdit($checkFormAction)) !== true) {
+        //     return $code;
+        // }
+
+        if ($checkFormAction && $this->custom_table->formActionDisable(FormActionType::EDIT)) {
+            return ErrorCode::FORM_ACTION_DISABLED();
         }
         
         if (!$this->custom_table->hasPermissionEditData($this)) {
             return ErrorCode::PERMISSION_DENY();
         }
         
-        if ($this->custom_table->isOneRecord()) {
-            return ErrorCode::PERMISSION_DENY();
-        }
+        // if ($this->custom_table->isOneRecord()) {
+        //     return ErrorCode::PERMISSION_DENY();
+        // }
 
         // check workflow
         if ($this->lockedWorkflow()) {
@@ -1331,7 +1541,8 @@ abstract class CustomValue extends ModelBase
     /**
      * User can delete this custom value
      *
-     * @param $checkFormAction if true, check as display
+     * @param bool $checkFormAction if true, check as display
+     * @return bool|ErrorCode
      */
     public function enableDelete($checkFormAction = false)
     {
@@ -1353,7 +1564,7 @@ abstract class CustomValue extends ModelBase
         }
         
         if (method_exists($this, 'disabled_delete_trait') && $this->disabled_delete_trait()) {
-            return ErrorCode::DELETE_DISABLED;
+            return ErrorCode::DELETE_DISABLED();
         }
         
         if (!is_null($parent_value = $this->getParentValue()) && ($code = $parent_value->enableDelete($checkFormAction)) !== true) {
@@ -1365,6 +1576,7 @@ abstract class CustomValue extends ModelBase
     
     /**
      * User can share this custom value
+     * @return bool
      */
     public function enableShare()
     {

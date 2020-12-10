@@ -114,9 +114,9 @@ class ValueModal extends Field
     /**
      * Set ajax.
      *
-     * @param string $text
+     * @param string $ajax
      *
-     * @return $this|mixed
+     * @return $this
      */
     public function ajax($ajax = '')
     {
@@ -140,7 +140,7 @@ class ValueModal extends Field
     /**
      * Set button class.
      *
-     * @param string $buttonlabel
+     * @param string $buttonClass
      *
      * @return $this
      */
@@ -229,8 +229,8 @@ EOT;
     /**
      * Callback hidden value
      *
-     * @param string $script
-     * @return $this|mixed
+     * @param string $hiddenFormat
+     * @return $this
      */
     public function hiddenFormat($hiddenFormat)
     {
@@ -261,6 +261,9 @@ EOT;
             $this->text = esc_html($this->text);
         }
 
+        // convert value
+        $this->value = $this->convertString($this->value);
+
         // set hidden
         $hidden = $this->value;
         if ($this->hiddenFormat instanceof \Closure) {
@@ -282,11 +285,6 @@ EOT;
             $this->buttonClass = 'btn-default';
         }
  
-        // set button label
-        if (is_array($this->value)) {
-            $this->value = json_encode($this->value);
-        }
-
         // set script
         $this->script();
 
@@ -300,5 +298,19 @@ EOT;
             'ajax' => $this->ajax,
             'modalContentname' => $this->modalContentname,
         ]);
+    }
+
+    /**
+     * convert string if value is array
+     *
+     * @return string
+     */
+    protected function convertString($value)
+    {
+        if (is_array($value)) {
+            return json_encode($value);
+        }
+
+        return $value;
     }
 }

@@ -6,12 +6,12 @@ use Exceedone\Exment\Enums\ApiScope;
 use Exceedone\Exment\Enums\ErrorCode;
 use Exceedone\Exment\Model\CustomTable;
 use Exceedone\Exment\Model\CustomColumn;
+use Exceedone\Exment\Model\NotifyNavbar;
 use Exceedone\Exment\Model\WorkflowValueAuthority;
+use Exceedone\Exment\Tests\TestDefine;
 
 class ApiTest extends ApiTestBase
 {
-    private const FILE_BASE64 = 'dGVzdA=='; //"test" text file.
-
     public function testOkAuthorize(){
         $response = $this->getPasswordToken('admin', 'adminadmin');
         
@@ -58,7 +58,7 @@ class ApiTest extends ApiTestBase
         ])->get(admin_urls('api', 'version'))
             ->assertStatus(200)
             ->assertJson([
-                'version' => getExmentCurrentVersion()
+                'version' => \Exment::getExmentCurrentVersion()
             ]);
     }
 
@@ -70,7 +70,7 @@ class ApiTest extends ApiTestBase
         ])->get(admin_urls('api', 'version'))
             ->assertStatus(200)
             ->assertJson([
-                'version' => getExmentCurrentVersion()
+                'version' => \Exment::getExmentCurrentVersion()
             ]);
     }
 
@@ -154,7 +154,7 @@ class ApiTest extends ApiTestBase
         ])->get(admin_urls('api', 'table'))
             ->assertStatus(200)
             ->assertJsonFragment([
-                'table_name' => 'base_info',
+                'table_name' => 'information',
             ])
             ;
     }
@@ -207,6 +207,7 @@ class ApiTest extends ApiTestBase
                 "order"=> "0",
                 'options' => [
                     "index_enabled"=> "1",
+                    "freeword_search"=> "1",
                 ]
             ])
             ->assertJsonStructure([
@@ -343,6 +344,7 @@ class ApiTest extends ApiTestBase
                 'order'=> '0',
                 'options' => [
                     'index_enabled'=> '1',
+                    'freeword_search'=> '1',
                     'default'=> '1',
                     'required'=> '1',
                     'help'=> '一覧表示したい場合、YESに設定してください。',
@@ -383,6 +385,7 @@ class ApiTest extends ApiTestBase
                 'order'=> '0',
                 'options' => [
                     'index_enabled'=> '1',
+                    'freeword_search' => '1',
                 ]
             ]);
     }
@@ -561,6 +564,25 @@ class ApiTest extends ApiTestBase
                 'code' => ErrorCode::NOT_INDEX_ENABLED
             ]);
     }
+
+    public function testGetValuesPermissionCheck(){
+        $token = $this->getUser2AccessToken([ApiScope::VALUE_READ]);
+        // update config for test
+        \Config::set('exment.api_max_data_count', 10000);
+
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+        ])->get(admin_urls('api', 'data', 'custom_value_edit').'?count=1000')
+            ->assertStatus(200);
+        $json = json_decode($response->baseResponse->getContent(), true);
+        // get ids
+        $ids = collect(array_get($json, 'data'))->map(function($j){
+            return array_get($j, 'id');
+        })->toArray();
+
+        $this->checkCustomValuePermission(CustomTable::getEloquent('custom_value_edit'), $ids);
+    }
+
 
     public function testNotFoundGetValues(){
         $token = $this->getAdminAccessToken([ApiScope::VALUE_READ]);
@@ -864,7 +886,7 @@ class ApiTest extends ApiTestBase
                 'user' => 'user_column'
             ]
         ])
-        ->assertStatus(500);
+        ->assertStatus(400);
     }
 
     public function testCreateValueFindkeyNotFound(){
@@ -1206,6 +1228,28 @@ class ApiTest extends ApiTestBase
             ]);
     }
 
+
+    public function testDataQueryPermissionCheck(){
+        $token = $this->getUser2AccessToken([ApiScope::VALUE_READ]);
+
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+        ])->get(admin_urls('api', 'data', 'custom_value_edit', 'query').'?q=index_1&count=100')
+            ->assertStatus(200);
+        $json = json_decode($response->baseResponse->getContent(), true);
+        // get ids
+        $ids = collect(array_get($json, 'data'))->map(function($j){
+            return array_get($j, 'id');
+        })->toArray();
+
+        $this->checkCustomValuePermission(CustomTable::getEloquent('custom_value_edit'), $ids, function($query){
+            $query->where('value->index_text', 'LIKE', 'index_1%');
+        });
+    }
+
+
+
+    // Query column ----------------------------------------------------
     public function testDataQueryColumn(){
         $token = $this->getAdminAccessToken([ApiScope::VALUE_READ]);
 
@@ -1235,6 +1279,28 @@ class ApiTest extends ApiTestBase
             ->assertStatus(200)
             ->assertJsonCount(4, 'data');
     }
+
+    
+    public function testDataQueryColumnPermissionCheck(){
+        $token = $this->getUser2AccessToken([ApiScope::VALUE_READ]);
+
+        \Config::set('exment.api_max_data_count', 10000);
+
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer $token",
+        ])->get(admin_urls('api', 'data', 'custom_value_edit', 'query-column').'?q=odd_even%20eq%20odd&count=1000')
+            ->assertStatus(200);
+        $json = json_decode($response->baseResponse->getContent(), true);
+        // get ids
+        $ids = collect(array_get($json, 'data'))->map(function($j){
+            return array_get($j, 'id');
+        })->toArray();
+
+        $this->checkCustomValuePermission(CustomTable::getEloquent('custom_value_edit'), $ids, function($query){
+            $query->where('value->odd_even', 'odd');
+        });
+    }
+
 
     public function testDataQueryColumnNotFound(){
         $token = $this->getAdminAccessToken([ApiScope::VALUE_READ]);
@@ -1308,22 +1374,26 @@ class ApiTest extends ApiTestBase
 
     public function testGetNotify(){
         $token = $this->getAdminAccessToken([ApiScope::NOTIFY_READ]);
+        $itemCount = NotifyNavbar::withoutGlobalScopes()->where('read_flg', 0)->where('target_user_id', TestDefine::TESTDATA_USER_LOGINID_ADMIN)->count();
+        \Config::set('exment.api_max_data_count', 10000);
 
         $this->withHeaders([
             'Authorization' => "Bearer $token",
-        ])->get(admin_urls('api', 'notify'))
+        ])->get(admin_urls_query('api', 'notify', ['count' => 10000]))
             ->assertStatus(200)
-            ->assertJsonCount(10, 'data');
+            ->assertJsonCount($itemCount, 'data');
     }
 
     public function testGetNotifyAll(){
         $token = $this->getAdminAccessToken([ApiScope::NOTIFY_WRITE]);
+        $itemCount = NotifyNavbar::withoutGlobalScopes()->where('target_user_id', TestDefine::TESTDATA_USER_LOGINID_ADMIN)->count();
+        \Config::set('exment.api_max_data_count', 10000);
 
         $this->withHeaders([
             'Authorization' => "Bearer $token",
-        ])->get(admin_urls('api', 'notify').'?all=1')
+        ])->get(admin_urls_query('api', 'notify', ['count' => 10000, 'all' => 1]))
             ->assertStatus(200)
-            ->assertJsonCount(20, 'data');
+            ->assertJsonCount($itemCount, 'data');
     }
 
     public function testGetNotifyWithCount(){
@@ -1338,6 +1408,7 @@ class ApiTest extends ApiTestBase
 
     public function testGetNotifyNotFound(){
         $token = $this->getUser2AccessToken([ApiScope::NOTIFY_READ]);
+        NotifyNavbar::withoutGlobalScopes()->where('target_user_id', TestDefine::TESTDATA_USER_LOGINID_USER2)->delete();
 
         $this->withHeaders([
             'Authorization' => "Bearer $token",
@@ -1376,7 +1447,7 @@ class ApiTest extends ApiTestBase
                 'user' => 2,
                 'file' => [
                     'name' => 'test.txt',
-                    'base64' => static::FILE_BASE64,
+                    'base64' => TestDefine::FILE_BASE64,
                 ],
             ]
         ])
@@ -1403,7 +1474,7 @@ class ApiTest extends ApiTestBase
             'value' => [
                 'file' => [
                     'name' => 'test.txt',
-                    'base64' => static::FILE_BASE64,
+                    'base64' => TestDefine::FILE_BASE64,
                 ],
             ]
         ])
@@ -1419,7 +1490,7 @@ class ApiTest extends ApiTestBase
             'Authorization' => "Bearer $token",
         ])->post(admin_urls('api', 'document', 'custom_value_edit', 1), [
             'name' => 'test1.txt',
-            'base64' => static::FILE_BASE64, //"test" text file.
+            'base64' => TestDefine::FILE_BASE64, //"test" text file.
         ])
         ->assertStatus(201);
 
@@ -1455,7 +1526,7 @@ class ApiTest extends ApiTestBase
         $token = $this->getAdminAccessToken([ApiScope::VALUE_READ]);
 
         $custom_value = CustomTable::getEloquent('custom_value_edit')->getValueModel(1);
-        $document = $custom_value->getDocuments()->first();
+        $document = $custom_value->getDocuments()->sortBy('id')->first();
 
         $response = $this->withHeaders([
             'Authorization' => "Bearer $token",
@@ -1464,14 +1535,14 @@ class ApiTest extends ApiTestBase
 
         $file = $response->baseResponse->getContent();
 
-        $this->assertMatch($file, 'test');
+        $this->assertMatch($file, TestDefine::FILE_TESTSTRING);
     }
 
     public function testDownloadFileJson(){
         $token = $this->getAdminAccessToken([ApiScope::VALUE_READ]);
 
         $custom_value = CustomTable::getEloquent('custom_value_edit')->getValueModel(1);
-        $document = $custom_value->getDocuments()->first();
+        $document = $custom_value->getDocuments()->sortBy('id')->first();
 
         $response = $this->withHeaders([
             'Authorization' => "Bearer $token",
@@ -1481,7 +1552,7 @@ class ApiTest extends ApiTestBase
         $json = json_decode($response->baseResponse->getContent(), true);
 
         $this->assertMatch(array_get($json, 'name'), $document->label);
-        $this->assertMatch(array_get($json, 'base64'), base64_encode('test'));
+        $this->assertMatch(array_get($json, 'base64'), base64_encode(TestDefine::FILE_TESTSTRING));
     }
 
     public function testNoPermissionCreateDocument(){
@@ -1550,7 +1621,7 @@ class ApiTest extends ApiTestBase
             'Authorization' => "Bearer $token",
         ])->post(admin_urls('api', 'document', 'custom_value_edit', 1), [
             'name' => 'test1.txt',
-            'base64' => static::FILE_BASE64, //"test" text file.
+            'base64' => TestDefine::FILE_BASE64, //"test" text file.
         ])
             ->assertStatus(403)
             ->assertJsonFragment([

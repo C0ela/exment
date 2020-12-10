@@ -4,6 +4,7 @@ namespace Exceedone\Exment\ColumnItems\CustomColumns;
 
 use Exceedone\Exment\ColumnItems\CustomItem;
 use Exceedone\Exment\Form\Field;
+use Exceedone\Exment\Validator;
 use Encore\Admin\Grid\Filter;
 
 class Boolean extends CustomItem
@@ -15,11 +16,11 @@ class Boolean extends CustomItem
      */
     protected $required = false;
     
-    public function text()
+    protected function _text($v)
     {
-        if (array_get($this->custom_column, 'options.true_value') == $this->value()) {
+        if (array_get($this->custom_column, 'options.true_value') == $v) {
             return array_get($this->custom_column, 'options.true_label');
-        } elseif (array_get($this->custom_column, 'options.false_value') == $this->value()) {
+        } elseif (array_get($this->custom_column, 'options.false_value') == $v) {
             return array_get($this->custom_column, 'options.false_label');
         }
         return null;
@@ -40,6 +41,12 @@ class Boolean extends CustomItem
     protected function getAdminFilterClass()
     {
         return Filter\Equal::class;
+    }
+ 
+    protected function setValidates(&$validates, $form_column_options)
+    {
+        $option = $this->getImportValueOption();
+        $validates[] = new Validator\BooleanRule($option);
     }
 
     protected function setAdminOptions(&$field, $form_column_options)
@@ -64,6 +71,11 @@ class Boolean extends CustomItem
         ]);
     }
     
+    /**
+     * replace value for import
+     *
+     * @return array
+     */
     protected function getImportValueOption()
     {
         $column = $this->custom_column;
@@ -76,7 +88,7 @@ class Boolean extends CustomItem
     /**
      * Get pure value. If you want to change the search value, change it with this function.
      *
-     * @param [type] $value
+     * @param string $label
      * @return ?string string:matched, null:not matched
      */
     public function getPureValue($label)

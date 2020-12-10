@@ -5,6 +5,7 @@ namespace Exceedone\Exment\ColumnItems\CustomColumns;
 use Exceedone\Exment\ColumnItems\CustomItem;
 use Exceedone\Exment\Form\Field;
 use Exceedone\Exment\Model\Define;
+use Exceedone\Exment\Validator;
 use Encore\Admin\Grid\Filter;
 
 class Yesno extends CustomItem
@@ -16,9 +17,9 @@ class Yesno extends CustomItem
      */
     protected $required = false;
 
-    public function text()
+    protected function _text($v)
     {
-        return boolval($this->value) ? 'YES' : 'NO';
+        return getYesNo($v);
     }
 
     public function saving()
@@ -49,26 +50,29 @@ class Yesno extends CustomItem
     {
         $filter->radio(Define::YESNO_RADIO);
     }
-    
+        
+    protected function setValidates(&$validates, $form_column_options)
+    {
+        $validates[] = new Validator\YesNoRule();
+    }
+
     /**
      * replace value for import
      *
-     * @param mixed $value
-     * @param array $setting
-     * @return void
+     * @return array
      */
     public function getImportValueOption()
     {
         return [
-            0    => 'NO',
-            1    => 'YES',
+            0    => getYesNo(0),
+            1    => getYesNo(1),
         ];
     }
 
     /**
      * Get pure value. If you want to change the search value, change it with this function.
      *
-     * @param [type] $value
+     * @param string $label
      * @return ?string string:matched, null:not matched
      */
     public function getPureValue($label)

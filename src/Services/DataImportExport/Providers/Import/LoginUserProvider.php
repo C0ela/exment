@@ -2,8 +2,10 @@
 
 namespace Exceedone\Exment\Services\DataImportExport\Providers\Import;
 
+use Exceedone\Exment\Services\Login\LoginService;
 use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Model\LoginUser;
+use Exceedone\Exment\Model\System;
 
 class LoginUserProvider extends ProviderBase
 {
@@ -63,7 +65,7 @@ class LoginUserProvider extends ProviderBase
     
     /**
      * validate imported all data.
-     * @param $data
+     * @param mixed $dataObjects
      * @return array
      */
     public function validateImportData($dataObjects)
@@ -84,12 +86,42 @@ class LoginUserProvider extends ProviderBase
     
     /**
      * validate data row
-     * @param $line_no
-     * @param $dataAndModel
+     * @param int $line_no
+     * @param array $dataAndModel
      * @return array
      */
     public function validateDataRow($line_no, $dataAndModel)
     {
+        $data = array_get($dataAndModel, 'data');
+        $model = array_get($dataAndModel, 'model');
+
+        if (!boolval(array_get($data, 'use_loginuser')) || boolval(array_get($data, 'create_password_auto'))) {
+            return true;
+        }
+        // if create_password_auto and password are null, nothing
+        if (is_null(array_get($data, 'create_password_auto')) && is_null(array_get($data, 'password'))) {
+            return true;
+        }
+
+        $errors = [];
+
+        // execute validation
+        $validator = \Validator::make($data, [
+            // get validate password.
+            // not check history.
+            'password' => \Exment::get_password_rule(true, null, ['confirmed' => false])
+        ]);
+        if ($validator->fails()) {
+            // create error message
+            foreach ($validator->getMessages() as $message) {
+                $errors[] = sprintf(exmtrans('custom_value.import.import_error_format'), ($line_no+1), implode(',', $message));
+            }
+            // return $errors;
+        }
+
+        if (!is_nullorempty($errors)) {
+            return $errors;
+        }
         return true;
     }
 
@@ -110,13 +142,14 @@ class LoginUserProvider extends ProviderBase
         // get use_loginuser
         $use_loginuser = array_get($data, 'use_loginuser');
         // if not set $login_user and $use_loginuser is true, create
-        if ($use_loginuser === '1'  && is_null($model->login_user)) {
+        if (strcmp($use_loginuser, '1') == 0  && is_null($model->login_user)) {
             $model->login_user = new LoginUser;
             $model->login_user->base_user_id = array_get($data, 'id');
         }
         // if set $login_user and $use_loginuser is false, remove
-        elseif ($use_loginuser === '0' && !is_null($model->login_user)) {
-            $model->login_user->remove();
+        elseif (strcmp($use_loginuser, '0') == 0 && !is_null($model->login_user)) {
+            $model->login_user->delete();
+            return;
         }
         
         if (is_null($model->login_user)) {
@@ -124,6 +157,7 @@ class LoginUserProvider extends ProviderBase
         }
         
         // set password
+        $password = null;
         if (boolval(array_get($data, 'create_password_auto'))) {
             $password = make_password();
             $update_flg = true;
@@ -134,14 +168,13 @@ class LoginUserProvider extends ProviderBase
             $update_flg = true;
         }
 
-        // send password
-        if (boolval(array_get($data, 'send_password')) && isset($password)) {
-            $model->login_user->sendPassword($password);
-        }
-
         if ($update_flg) {
-            $model->login_user->password = $password;
-            $model->login_user->save();
+            // reset password
+            LoginService::resetPassword($model->login_user, [
+                'send_password' => boolval(array_get($data, 'send_password')),
+                'password_reset_flg' => (System::first_change_password() || boolval(array_get($data, 'password_reset_flg'))),
+                'password' => $password,
+            ]);
         }
         return $model;
     }

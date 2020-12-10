@@ -13,11 +13,11 @@ class Decimal extends CustomItem
     
     public function prepare()
     {
-        if (!is_null($this->value())) {
+        if (!is_null($this->value)) {
             $this->value = parseFloat($this->value);
             if (array_has($this->custom_column, 'options.decimal_digit')) {
                 $digit = intval(array_get($this->custom_column, 'options.decimal_digit'));
-                $this->value = floor($this->value * pow(10, $digit)) / pow(10, $digit);
+                $this->value = floorDigit($this->value, $digit);
             }
         }
         return $this;
@@ -26,10 +26,10 @@ class Decimal extends CustomItem
     /**
      * get html(for display)
      */
-    public function html()
+    protected function _html($v)
     {
         // default escapes text
-        $text = boolval(array_get($this->options, 'grid_column')) ? get_omitted_string($this->text()) : $this->text();
+        $text = boolval(array_get($this->options, 'grid_column')) ? get_omitted_string($this->_text($v)) : $this->_text($v);
         // display number as percent
         if (array_has($this->custom_column, 'options.percent_format')) {
             if (boolval(array_get($this->custom_column, 'options.percent_format')) && isset($text)) {
@@ -39,23 +39,23 @@ class Decimal extends CustomItem
         return esc_html($text);
     }
     
-    public function text()
+    protected function _text($v)
     {
-        if (is_null($this->value())) {
+        if (is_null($v)) {
             return null;
         }
         if (boolval(array_get($this->custom_column, 'options.number_format'))
-        && is_numeric($this->value())
+        && is_numeric($v)
         && !boolval(array_get($this->options, 'disable_number_format'))) {
             if (array_has($this->custom_column, 'options.decimal_digit')) {
                 $digit = intval(array_get($this->custom_column, 'options.decimal_digit'));
-                $number = number_format($this->value(), $digit);
+                $number = number_format($v, $digit);
                 return preg_replace("/\.?0+$/", '', $number);
             } else {
-                return number_format($this->value());
+                return number_format($v);
             }
         }
-        return $this->value();
+        return $this->_value($v);
     }
     public function saving()
     {
@@ -105,19 +105,19 @@ class Decimal extends CustomItem
 
         $validates[] = new Validator\DecimalCommaRule;
     }
+
     /**
-     * get cast name for sort
+     * get cast Options
      */
-    public function getCastName()
+    protected function getCastOptions()
     {
-        $grammar = \DB::getQueryGrammar();
         if (array_has($this->custom_column, 'options.decimal_digit')) {
-            return $grammar->getCastString(DatabaseDataType::TYPE_DECIMAL, true, [
+            return [DatabaseDataType::TYPE_DECIMAL, true, [
                 'length' => 50,
                 'decimal_digit' => intval(array_get($this->custom_column, 'options.decimal_digit', 2))
-            ]);
+            ]];
         } else {
-            return $grammar->getCastString(DatabaseDataType::TYPE_DECIMAL, true);
+            return [DatabaseDataType::TYPE_DECIMAL, true, []];
         }
     }
 }

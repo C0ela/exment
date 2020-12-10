@@ -16,7 +16,7 @@ use Carbon\Carbon;
  */
 class Google
 {
-    use AuthTrait, ThrottlesLogins;
+    use AuthTrait;
 
     public function __construct()
     {
@@ -74,8 +74,6 @@ class Google
     /**
      * Handle verify posting
      *
-     * @param Request $request
-     *
      * @return mixed
      */
     public function register()
@@ -88,7 +86,8 @@ class Google
         if ($this->throttle && $this->hasTooManyLoginAttempts($request)) {
             $this->fireLockoutEvent($request);
 
-            return $this->sendLockoutResponse($request, 'verify_code');
+            $this->sendLockoutResponse($request, 'verify_code');
+            return;
         }
 
         $verify_code = $request->get('code');
@@ -142,8 +141,6 @@ class Google
     /**
      * Handle verify posting
      *
-     * @param Request $request
-     *
      * @return mixed
      */
     public function verify()
@@ -156,7 +153,8 @@ class Google
         if ($this->throttle && $this->hasTooManyLoginAttempts($request)) {
             $this->fireLockoutEvent($request);
 
-            return $this->sendLockoutResponse($request, 'verify_code');
+            $this->sendLockoutResponse($request, 'verify_code');
+            return;
         }
 
         $verify_code = $request->get('verify_code');

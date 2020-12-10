@@ -3,8 +3,9 @@
 namespace Exceedone\Exment\Model;
 
 use Exceedone\Exment\Enums\ConditionTypeDetail;
+use Exceedone\Exment\Model\Interfaces\WorkflowAuthorityInterface;
 
-class WorkflowAuthority extends ModelBase
+class WorkflowAuthority extends ModelBase implements WorkflowAuthorityInterface
 {
     use Traits\UseRequestSessionTrait;
 
@@ -28,8 +29,9 @@ class WorkflowAuthority extends ModelBase
     /**
      * Get workflow authorities from value array
      *
-     * @param [type] $value
-     * @return void
+     * @param string|array $values
+     * @param WorkflowAction $values
+     * @return array
      */
     public static function getAuhoritiesFromValue($values, $action = null)
     {

@@ -8,6 +8,7 @@ use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Model\Plugin;
 use Exceedone\Exment\Enums\RoleType;
 use Exceedone\Exment\Enums\Permission as PermissionEnum;
+use Encore\Admin\Auth\Permission as AdminPermission;
 
 class Permission
 {
@@ -80,6 +81,22 @@ class Permission
     public static function bootingShouldPass(callable $callback)
     {
         static::$bootingShouldPasses[] = $callback;
+    }
+
+    /**
+     * Send not found or deny error.
+     */
+    public static function notFoundOrDeny()
+    {
+        return AdminPermission::error(exmtrans('common.message.notfound_or_deny'));
+    }
+
+    /**
+     * Send error response page.
+     */
+    public static function error($message = null)
+    {
+        return AdminPermission::error($message);
     }
 
     /**
@@ -183,6 +200,8 @@ class Permission
             case "auth-2factor":
             case "auth/login":
             case "auth/logout":
+            case "saml/login":
+            case "saml/logout":
             case "auth/setting":
             case "auth/reset":
             case "auth/change":
@@ -198,6 +217,7 @@ class Permission
             ///// only system permission
             case "system":
             case "backup":
+            case "login_setting":
             case "database":
             case "auth/menu":
             case "auth/logs":
@@ -246,15 +266,9 @@ class Permission
                 }
                 return array_key_exists('custom_table', $this->permission_details);
             case "column":
-                if ($this->role_type == RoleType::SYSTEM) {
-                    return array_key_exists('custom_table', $this->permission_details);
-                }
-                // check endpoint name and checking table_name.
-                if (!$this->matchEndPointTable($endpoint)) {
-                    return false;
-                }
-                return array_key_exists('custom_table', $this->permission_details);
             case "relation":
+            case "copy":
+            case "operation":
                 if ($this->role_type == RoleType::SYSTEM) {
                     return array_key_exists('custom_table', $this->permission_details);
                 }
@@ -271,7 +285,7 @@ class Permission
                 if (!$this->matchEndPointTable($endpoint)) {
                     return false;
                 }
-                return array_key_exists('custom_form', $this->permission_details);
+                return array_key_exists('custom_table', $this->permission_details) || array_key_exists('custom_form', $this->permission_details);
             case "view":
                 if ($this->role_type == RoleType::SYSTEM) {
                     return array_keys_exists(PermissionEnum::AVAILABLE_VIEW_CUSTOM_VALUE, $this->permission_details);
@@ -302,7 +316,7 @@ class Permission
     /**
      * Get Endpoint
      * @param ?string $endpoint
-     * @return mixed
+     * @return string|null
      */
     protected function getEndPoint(?string $endpoint) : ?string
     {
@@ -320,12 +334,12 @@ class Permission
         ///// get last url.
         $uris = explode("/", $url);
         foreach ($uris as $k => $uri) {
-            if (!isset($uri) || mb_strlen($uri) == 0) {
+            if (!is_null($uri) && mb_strlen($uri) == 0) {
                 continue;
             }
 
             // if $uri is "auth", get next uri.
-            if (in_array($uri, array_merge(Define::CUSTOM_TABLE_ENDPOINTS, ['auth', 'plugins']))) {
+            if (in_array($uri, array_merge(Define::CUSTOM_TABLE_ENDPOINTS, ['auth', 'saml', 'plugins']))) {
                 // but url is last item, return $uri.
                 if (count($uris) <= $k+1) {
                     return $uri;
@@ -341,8 +355,8 @@ class Permission
 
     /**
      * Whether matching url endpoint and table_name for check.
-     * @param Request $request
-     * @return mixed
+     * @param string|null $endpoint
+     * @return bool
      */
     protected function matchEndPointTable($endpoint)
     {
@@ -358,12 +372,14 @@ class Permission
     /**
      * Check plugin's permission
      *
-     * @return void
+     * @return bool
      */
     protected function validatePluginPermission($endpoint)
     {
         // Get plugin data by Endpoint
-        $plugin = Plugin::where('options->uri', $endpoint)->first();
+        $plugin = Plugin::firstRecord(function ($plugin) use ($endpoint) {
+            return strcmp($plugin->getOption('uri'), $endpoint) == 0;
+        }, false);
         if (!isset($plugin)) {
             return false;
         }
@@ -386,7 +402,7 @@ class Permission
     /**
      * Check custom value's permission
      *
-     * @return void
+     * @return boolean
      */
     protected function validateCustomValuePermission($endpoint)
     {
@@ -395,7 +411,7 @@ class Permission
         }
 
         // if request has id, permission contains CUSTOM_VALUE_ACCESS
-        if (!is_null($id = request()->id) && request()->is(trim(admin_base_path("data/$endpoint/*"), '/'))) {
+        if ($this->checkAsAccessCustomValue($endpoint)) {
             $permissions = PermissionEnum::AVAILABLE_ACCESS_CUSTOM_VALUE;
         } else {
             $permissions = PermissionEnum::AVAILABLE_VIEW_CUSTOM_VALUE;
@@ -409,6 +425,26 @@ class Permission
             return false;
         }
         return array_keys_exists($permissions, $this->permission_details);
+    }
+
+    /**
+     * is "Access" for permission check.
+     *
+     * @param string $endpoint
+     * @return bool if true, check as AVAILABLE_ACCESS_CUSTOM_VALUE. else, AVAILABLE_VIEW_CUSTOM_VALUE
+     */
+    protected function checkAsAccessCustomValue($endpoint)
+    {
+        // if request has id, permission contains CUSTOM_VALUE_ACCESS
+        if (!is_null($id = request()->id) && request()->is(trim(admin_base_path("data/$endpoint/*"), '/'))) {
+            return true;
+        }
+        // if modalframe, return true
+        elseif (request()->has('modalframe')) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

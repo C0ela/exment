@@ -2,8 +2,9 @@
 
 namespace Exceedone\Exment\Services\DataImportExport\Providers\Export;
 
-use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Collection;
 use Exceedone\Exment\Enums\SystemTableName;
+use Exceedone\Exment\Model\System;
 use Exceedone\Exment\Model\CustomTable;
 use Exceedone\Exment\Model\CustomColumn;
 
@@ -72,21 +73,28 @@ class LoginUserProvider extends ProviderBase
             exmtrans('user.send_password'),
         ];
 
+        if (!System::first_change_password()) {
+            $rows[0][] = 'password_reset_flg';
+            $rows[1][] = exmtrans('user.password_reset_flg');
+        }
+
         return $rows;
     }
 
     /**
      * get target chunk records
      */
-    public function getRecords()
+    public function getRecords() : Collection
     {
+        $records = new Collection;
         $this->grid->model()->chunk(function ($data) use (&$records) {
-            if (!isset($records)) {
+            if (is_nullorempty($records)) {
                 $records = new Collection;
             }
             $records = $records->merge($data);
-        }) ?? [];
+        }) ?? new Collection;
 
+        $this->count = count($records);
         return $records;
     }
 

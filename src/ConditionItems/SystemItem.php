@@ -5,8 +5,8 @@ namespace Exceedone\Exment\ConditionItems;
 use Exceedone\Exment\Model\CustomValue;
 use Exceedone\Exment\Model\Condition;
 use Exceedone\Exment\Enums\ConditionTypeDetail;
-use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Enums\WorkflowTargetSystem;
+use Exceedone\Exment\Model\Interfaces\WorkflowAuthorityInterface;
 
 class SystemItem extends ConditionItemBase implements ConditionItemInterface
 {
@@ -37,23 +37,26 @@ class SystemItem extends ConditionItemBase implements ConditionItemInterface
         return isset($enum) ? exmtrans('common.' . $enum->lowerkey()) : null;
     }
     
+    
     /**
-     * Check has workflow authority
+     * Check has workflow authority with this item.
      *
-     * @param CustomValue $custom_value
+     * @param WorkflowAuthorityInterface $workflow_authority
+     * @param CustomValue|null $custom_value
+     * @param CustomValue $targetUser
      * @return boolean
      */
-    public function hasAuthority($workflow_authority, $custom_value, $targetUser)
+    public function hasAuthority(WorkflowAuthorityInterface $workflow_authority, ?CustomValue $custom_value, $targetUser)
     {
         return $workflow_authority->related_id == WorkflowTargetSystem::CREATED_USER && $custom_value->created_user_id == $targetUser->id;
     }
 
-    public static function setConditionQuery($query, $tableName, $custom_table, $authorityTableName = SystemTableName::WORKFLOW_AUTHORITY)
+    public static function setWorkflowConditionQuery($query, $tableName, $custom_table)
     {
-        $query->orWhere(function ($query) use ($tableName, $authorityTableName) {
-            $query->where($authorityTableName . '.related_id', WorkflowTargetSystem::CREATED_USER)
-                ->where($authorityTableName . '.related_type', ConditionTypeDetail::SYSTEM()->lowerkey())
-                ->where($tableName . '.created_user_id', \Exment::user()->getUserId());
+        $query->orWhere(function ($query) use ($tableName) {
+            $query->where('authority_related_id', WorkflowTargetSystem::CREATED_USER)
+                ->where('authority_related_type', ConditionTypeDetail::SYSTEM()->lowerkey())
+                ->where($tableName . '.created_user_id', \Exment::getUserId());
         });
     }
 }

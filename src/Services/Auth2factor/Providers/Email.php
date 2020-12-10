@@ -15,7 +15,7 @@ use Carbon\Carbon;
  */
 class Email
 {
-    use AuthTrait, ThrottlesLogins;
+    use AuthTrait;
 
     public function __construct()
     {
@@ -40,8 +40,6 @@ class Email
     /**
      * Handle verify posting
      *
-     * @param Request $request
-     *
      * @return mixed
      */
     public function verify()
@@ -54,7 +52,8 @@ class Email
         if ($this->throttle && $this->hasTooManyLoginAttempts($request)) {
             $this->fireLockoutEvent($request);
 
-            return $this->sendLockoutResponse($request, 'verify_code');
+            $this->sendLockoutResponse($request, 'verify_code');
+            return;
         }
 
         $verify_code = $request->get('verify_code');

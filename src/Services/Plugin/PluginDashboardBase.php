@@ -7,9 +7,10 @@ namespace Exceedone\Exment\Services\Plugin;
  */
 class PluginDashboardBase extends PluginPublicBase
 {
-    use PluginPageTrait;
-    
+    use PluginBase, PluginPageTrait;
+
     protected $dashboard;
+    protected $dashboard_box;
 
     public function __construct($plugin, $dashboard_box)
     {
@@ -50,7 +51,7 @@ class PluginDashboardBase extends PluginPublicBase
     /**
      * Get route uri for dashboard
      *
-     * @return void
+     * @return string
      */
     public function getDashboardUri($endpoint = null)
     {

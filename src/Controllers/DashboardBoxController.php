@@ -4,9 +4,7 @@ namespace Exceedone\Exment\Controllers;
 
 use Encore\Admin\Form;
 use Encore\Admin\Layout\Content;
-//use Encore\Admin\Controllers\HasResourceActions;
-use Encore\Admin\Widgets\Box;
-//use Encore\Admin\Widgets\Form;
+use Exceedone\Exment\Auth\Permission as Checker;
 use Illuminate\Http\Request;
 use Exceedone\Exment\Model\Dashboard;
 use Exceedone\Exment\Model\DashboardBox;
@@ -25,7 +23,7 @@ class DashboardBoxController extends AdminControllerBase
     protected $row_no;
     protected $column_no;
 
-    public function __construct(Request $request)
+    public function __construct()
     {
         $this->setPageInfo(exmtrans("dashboard.header"), exmtrans("dashboard.header"));
     }
@@ -120,7 +118,7 @@ class DashboardBoxController extends AdminControllerBase
             $classname::setAdminOptions($form, $dashboard);
         })->disableHeader();
         
-        $form->tools(function (Form\Tools $tools) use ($id, $form) {
+        $form->tools(function (Form\Tools $tools) {
             $tools->disableList();
 
             // addhome button
@@ -158,6 +156,11 @@ class DashboardBoxController extends AdminControllerBase
         // get dashboard_id from query "dashboard_suuid"
         if (isset($id)) {
             $dashboard_box = DashboardBox::getEloquent($id);
+            if (!isset($dashboard_box)) {
+                Checker::notFoundOrDeny();
+                return false;
+            }
+
             $dashboard = $dashboard_box->dashboard;
             return [$dashboard, $dashboard_box->dashboard_box_type, $dashboard_box->row_no, $dashboard_box->column_no];
         }
@@ -167,7 +170,7 @@ class DashboardBoxController extends AdminControllerBase
         } else {
             // get dashboard_suuid from query
             $dashboard_suuid = $request->query('dashboard_suuid');
-            if (!isset($dashboard_suuid)) {
+            if (is_nullorempty($dashboard_suuid)) {
                 return [null, null, null, null];
             }
             $dashboard = Dashboard::findBySuuid($dashboard_suuid) ?? null;
@@ -201,9 +204,13 @@ class DashboardBoxController extends AdminControllerBase
         return [$dashboard, $dashboard_box_type, $row_no, $column_no];
     }
     
+    
     /**
      * get views using table id
-     * @param mixed custon_table id
+     *
+     * @param Request $request
+     * @param string $dashboard_type
+     * @return array
      */
     public function tableViews(Request $request, $dashboard_type)
     {

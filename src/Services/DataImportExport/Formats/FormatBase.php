@@ -49,12 +49,13 @@ abstract class FormatBase
         $files = [];
         // create excel
         $spreadsheet = new Spreadsheet();
+        $sheet_name = null;
         foreach ($this->datalist as $index => $data) {
             $sheet_name = array_get($data, 'name');
             $outputs = array_get($data, 'outputs');
 
             $sheet = new Worksheet($spreadsheet, $sheet_name);
-            $sheet->fromArray($outputs, null, 'A1', false, false);
+            $sheet->fromArray($outputs, null, 'A1', false);
 
             // set autosize
             if (count($outputs) > 0) {
@@ -99,6 +100,29 @@ abstract class FormatBase
         return $files;
     }
 
+    /**
+     * Get options for getdatatable or count
+     *
+     * @param array $options
+     * @return array
+     */
+    public function getDataOptions(array $options)
+    {
+        return array_merge([
+            'checkCount' => true, // whether checking count
+            'page' => null, // if set, getting target page count
+            'take' => null, // if set, taking data count
+        ], $options);
+    }
+
     abstract public function createResponse($files);
     abstract protected function getDefaultHeaders();
+
+    /**
+     * whether this out is as zip.
+     * This table is parent and contains relation 1:n or n:n.
+     *
+     * @return boolean
+     */
+    abstract protected function isOutputAsZip();
 }

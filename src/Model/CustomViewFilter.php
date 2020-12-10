@@ -6,6 +6,7 @@ use Exceedone\Exment\Enums\SystemColumn;
 use Exceedone\Exment\Enums\ConditionType;
 use Exceedone\Exment\Enums\FilterOption;
 use Exceedone\Exment\Enums\FilterSearchType;
+use Exceedone\Exment\Enums\ColumnType;
 use Exceedone\Exment\ColumnItems\WorkflowItem;
 use Carbon\Carbon;
 
@@ -14,9 +15,11 @@ class CustomViewFilter extends ModelBase
     use Traits\CustomViewColumnTrait;
     use Traits\TemplateTrait;
     use Traits\UseRequestSessionTrait;
+    use Traits\DatabaseJsonOptionTrait;
 
     protected $guarded = ['id'];
     protected $appends = ['view_column_target', 'view_filter_condition_value'];
+    protected $casts = ['options' => 'json'];
 
     public static $templateItems = [
         'excepts' => [
@@ -87,6 +90,25 @@ class CustomViewFilter extends ModelBase
         return static::getEloquentDefault($id, $withs);
     }
 
+    public function getViewPivotColumnIdAttribute()
+    {
+        return $this->getViewPivotIdTrait('view_pivot_column_id');
+    }
+    public function setViewPivotColumnIdAttribute($view_pivot_column_id)
+    {
+        return $this->setViewPivotIdTrait('view_pivot_column_id', $view_pivot_column_id);
+    }
+    
+    public function getViewPivotTableIdAttribute()
+    {
+        return $this->getViewPivotIdTrait('view_pivot_table_id');
+    }
+    public function setViewPivotTableIdAttribute($view_pivot_table_id)
+    {
+        return $this->setViewPivotIdTrait('view_pivot_table_id', $view_pivot_table_id);
+    }
+    
+    
     /**
      * set value filter
      */
@@ -97,19 +119,25 @@ class CustomViewFilter extends ModelBase
         $condition_value_text = $this->view_filter_condition_value_text;
         $view_filter_condition = $this->view_filter_condition;
         $method_name = $or_option ? 'orWhere': 'where';
+        $isDateTime = false;
+        $isMultiple = false;
         
         if ($this->view_column_type == ConditionType::WORKFLOW) {
-            return WorkflowItem::scopeWorkflow($model, $this->view_column_target_id, $this->custom_table, $view_filter_condition, $condition_value_text);
+            return WorkflowItem::scopeWorkflow($model, $this->view_column_target_id, $this->custom_table, $view_filter_condition, $condition_value_text, $or_option);
         }
 
         if ($this->view_column_type == ConditionType::COLUMN) {
             $column_column = CustomColumn::getEloquent($view_column_target);
             $view_column_target = isset($column_column) ? $column_column->getIndexColumnName() : null;
+            $isDateTime = isset($column_column) ? isMatchString($column_column->column_type, ColumnType::DATETIME) : false;
+            $isMultiple = isset($column_column) ? $column_column->column_item->isMultipleEnabled() : false;
         } elseif ($this->view_column_type == ConditionType::PARENT_ID) {
             //TODO: set as 1:n. develop as n:n
             $view_column_target = 'parent_id';
         } elseif ($this->view_column_type == ConditionType::SYSTEM) {
-            $view_column_target = SystemColumn::getOption(['id' => $view_column_target])['sqlname'] ?? null;
+            $systemOption = SystemColumn::getOption(['id' => $view_column_target]);
+            $view_column_target = $systemOption['sqlname'] ?? null;
+            $isDateTime = isMatchString($systemOption['type'] ?? null, 'datetime');
         }
 
         if (!isset($view_column_target)) {
@@ -129,12 +157,10 @@ class CustomViewFilter extends ModelBase
         switch ($view_filter_condition) {
             // equal
             case FilterOption::EQ:
-            case FilterOption::USER_EQ:
                 $model->{$method_name}($view_column_target, $condition_value_text);
                 break;
             // not equal
             case FilterOption::NE:
-            case FilterOption::USER_NE:
                 $model->{$method_name}($view_column_target, '<>', $condition_value_text);
                 break;
             // not null
@@ -195,6 +221,7 @@ class CustomViewFilter extends ModelBase
             case FilterOption::DAY_TODAY:
             case FilterOption::DAY_TOMORROW:
                 // get target day
+                $value_day = null;
                 switch ($view_filter_condition) {
                     case FilterOption::DAY_ON:
                         $value_day = Carbon::parse($condition_value_text);
@@ -209,7 +236,7 @@ class CustomViewFilter extends ModelBase
                         $value_day = Carbon::tomorrow();
                         break;
                 }
-                $model->{$method_name.'Date'}($view_column_target, $value_day);
+                $model->{"{$method_name}DateExment"}($view_column_target, $value_day, $isDateTime);
                 break;
                 
             // date equal month
@@ -217,6 +244,7 @@ class CustomViewFilter extends ModelBase
             case FilterOption::DAY_LAST_MONTH:
             case FilterOption::DAY_NEXT_MONTH:
                 // get target month
+                $value_day = null;
                 switch ($view_filter_condition) {
                     case FilterOption::DAY_THIS_MONTH:
                         $value_day = new Carbon('first day of this month');
@@ -228,11 +256,7 @@ class CustomViewFilter extends ModelBase
                         $value_day = new Carbon('first day of next month');
                         break;
                 }
-                $model->{$method_name}(function ($query) use ($view_column_target, $value_day) {
-                    $query
-                        ->whereYear($view_column_target, $value_day->year)
-                        ->whereMonth($view_column_target, $value_day->month);
-                });
+                $model->{"{$method_name}YearMonthExment"}($view_column_target, $value_day, $isDateTime);
                 break;
                 
             // date equal year
@@ -250,8 +274,10 @@ class CustomViewFilter extends ModelBase
                     case FilterOption::DAY_NEXT_YEAR:
                         $value_day = new Carbon('first day of next year');
                         break;
+                    default:
+                        throw new \Exception; // (Never called this, for set lint).
                 }
-                $model->{$method_name.'Year'}($view_column_target, $value_day->year);
+                $model->{$method_name.'YearExment'}($view_column_target, $value_day->year, $isDateTime);
                 break;
                 
             // date and X days before or after
@@ -264,6 +290,8 @@ class CustomViewFilter extends ModelBase
             case FilterOption::DAY_LAST_X_DAY_OR_BEFORE:
             case FilterOption::DAY_NEXT_X_DAY_OR_BEFORE:
                 $today = Carbon::today();
+                $target_day = null;
+                $mark = null;
                 // get target day and where mark
                 switch ($view_filter_condition) {
                     case FilterOption::DAY_ON_OR_AFTER:
@@ -299,35 +327,40 @@ class CustomViewFilter extends ModelBase
                         $mark = "<=";
                         break;
                 }
-                $model->{$method_name.'Date'}($view_column_target, $mark, $target_day);
+                $model->{$method_name.'DateMarkExment'}($view_column_target, $target_day, $mark, $isDateTime);
                 break;
                 
+
+
             // for select --------------------------------------------------
             case FilterOption::SELECT_EXISTS:
-                $raw = "JSON_SEARCH($view_column_target, 'one', '$condition_value_text')";
-                $model->{$method_name}(function ($query) use ($view_column_target, $raw, $condition_value_text) {
-                    $query->where(function ($qry) use ($view_column_target, $raw) {
-                        $qry->where($view_column_target, 'LIKE', '[%]')
-                            ->whereNotNull(\DB::raw($raw));
-                    })->orWhere($view_column_target, $condition_value_text);
-                });
-                break;
             case FilterOption::SELECT_NOT_EXISTS:
-                $raw = "JSON_SEARCH($view_column_target, 'one', '$condition_value_text')";
-                $model->{$method_name}(function ($query) use ($view_column_target, $raw, $condition_value_text) {
-                    $query->where(function ($qry) use ($view_column_target, $raw) {
-                        $qry->where($view_column_target, 'LIKE', '[%]')
-                            ->whereNull(\DB::raw($raw));
-                    })->orWhere($view_column_target, '<>', $condition_value_text);
-                });
+            case FilterOption::USER_EQ:
+            case FilterOption::USER_NE:
+                $is_exists = isMatchString($view_filter_condition, FilterOption::SELECT_EXISTS) || isMatchString($view_filter_condition, FilterOption::USER_EQ);
+                // if as multiple search
+                if ($isMultiple) {
+                    $method_name_suffix = $is_exists ? 'InArrayString' : 'NotInArrayString';
+                    $model->{$method_name.$method_name_suffix}($view_column_target, $condition_value_text);
+                }
+                // if default
+                else {
+                    $mark = $is_exists ? '=' : '<>';
+                    $model->{$method_name . 'OrIn'}($view_column_target, $mark, $condition_value_text);
+                }
                 break;
         
             // for user --------------------------------------------------
             case FilterOption::USER_EQ_USER:
-                $model->{$method_name}($view_column_target, \Exment::user()->base_user->id);
-                break;
             case FilterOption::USER_NE_USER:
-                $model->{$method_name}($view_column_target, '<>', \Exment::user()->base_user->id);
+                $user_id = \Exment::getUserId();
+                if ($user_id) {
+                    $mark = isMatchString($view_filter_condition, FilterOption::USER_NE_USER) ? '<>' : '=';
+                    $model->{$method_name}($view_column_target, $mark, $user_id);
+                } else {
+                    $model->{$method_name . 'Raw'}('1 = 0');
+                }
+                break;
         }
 
         return $model;

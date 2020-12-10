@@ -9,12 +9,13 @@ use Exceedone\Exment\Model\CustomColumnMulti;
 use Exceedone\Exment\Model\CustomTable;
 use Exceedone\Exment\Model\CustomView;
 use Exceedone\Exment\Model\CustomViewColumn;
+use Exceedone\Exment\Model\CustomViewSummary;
 use Exceedone\Exment\Model\CustomViewSort;
+use Exceedone\Exment\Model\CustomFormColumn;
 use Exceedone\Exment\Model\CustomValueAuthoritable;
 use Exceedone\Exment\Model\System;
 use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Model\Notify;
-use Exceedone\Exment\Model\Menu;
 use Exceedone\Exment\Model\DashboardBox;
 use Exceedone\Exment\Model\Plugin;
 use Exceedone\Exment\Enums;
@@ -26,7 +27,10 @@ use Exceedone\Exment\Enums\MailKeyName;
 use Exceedone\Exment\Enums\ViewKindType;
 use Exceedone\Exment\Enums\NotifyTrigger;
 use Exceedone\Exment\Enums\NotifySavedType;
+use Exceedone\Exment\Enums\LoginType;
+use Exceedone\Exment\Enums\FormColumnType;
 use Exceedone\Exment\Services\DataImportExport;
+use Exceedone\Exment\Services\EnvService;
 use Exceedone\Exment\Middleware\Morph;
 use Carbon\Carbon;
 
@@ -78,6 +82,9 @@ class PatchDataCommand extends Command
                 return;
             case 'alter_index_hyphen':
                 $this->reAlterIndexContainsHyphen();
+                return;
+            case 'alter_index_all':
+                $this->reAlterIndexAll();
                 return;
             case '2factor':
                 $this->import2factorTemplate();
@@ -133,11 +140,41 @@ class PatchDataCommand extends Command
             case 'remove_stored_revision':
                 $this->removeStoredRevision();
                 return;
+            case 'login_type_sso':
+                $this->setLoginTypeSso();
+                // no break
             case 'patch_log_opelation':
                 $this->patchLogOpelation();
                 return;
             case 'plugin_all_user_enabled':
                 $this->patchAllUserEnabled();
+                return;
+            case 'view_column_suuid':
+                $this->patchViewColumnSuuid();
+                // no break
+            case 'patch_form_column_relation':
+                $this->patchFormColumnRelation();
+                return;
+            case 'clear_form_column_relation':
+                $this->clearFormColumnRelation();
+                return;
+            case 'patch_freeword_search':
+                $this->setFreewordSearchOption();
+                return;
+            case 'init_custom_operation_type':
+                $this->initCustomOperationType();
+                return;
+            case 'set_env':
+                $this->setEnv();
+                return;
+            case 'patch_view_dashboard':
+                $this->patchViewDashboard();
+                return;
+            case 'update_notify_difinition':
+                $this->updateNotifyDifinition();
+                return;
+            case 'patch_view_only':
+                $this->patchViewOnly();
                 return;
         }
 
@@ -227,15 +264,48 @@ class PatchDataCommand extends Command
     {
         // get index contains hyphen
         $index_custom_columns = CustomColumn::indexEnabled()->where('column_name', 'LIKE', '%-%')->get();
-        
+        $this->reAlterIndex($index_custom_columns);
+    }
+
+    /**
+     * re-alter Index all
+     *
+     * @return void
+     */
+    protected function reAlterIndexAll()
+    {
+        // get index contains hyphen
+        $index_custom_columns = CustomColumn::indexEnabled()->get();
+        $this->reAlterIndex($index_custom_columns);
+    }
+
+    protected function reAlterIndex($index_custom_columns)
+    {
         foreach ($index_custom_columns as  $index_custom_column) {
             $db_table_name = getDBTableName($index_custom_column->custom_table);
             $db_column_name = $index_custom_column->getIndexColumnName(false);
             $index_name = "index_$db_column_name";
             $column_name = $index_custom_column->column_name;
+            $column_type = $index_custom_column->column_item->getVirtualColumnTypeName();
 
             \Schema::dropIndexColumn($db_table_name, $db_column_name, $index_name);
-            \Schema::alterIndexColumn($db_table_name, $db_column_name, $index_name, $column_name);
+            \Schema::alterIndexColumn($db_table_name, $db_column_name, $index_name, $column_name, $column_type);
+        }
+    }
+    
+    /**
+     * set freeword_search option true, if index-column
+     *
+     * @return void
+     */
+    protected function setFreewordSearchOption()
+    {
+        // get index columns
+        $index_custom_columns = CustomColumn::indexEnabled()->get();
+        
+        foreach ($index_custom_columns as  $index_custom_column) {
+            $index_custom_column->setOption('freeword_search', '1');
+            $index_custom_column->save();
         }
     }
     
@@ -246,7 +316,7 @@ class PatchDataCommand extends Command
      */
     protected function import2factorTemplate()
     {
-        return $this->patchMailTemplate([
+        $this->patchMailTemplate([
             'verify_2factor',
             'verify_2factor_google',
             'verify_2factor_system',
@@ -260,7 +330,7 @@ class PatchDataCommand extends Command
      */
     protected function importZipPasswordTemplate()
     {
-        return $this->patchMailTemplate([
+        $this->patchMailTemplate([
             'password_notify',
             'password_notify_header',
         ]);
@@ -273,7 +343,7 @@ class PatchDataCommand extends Command
      */
     protected function importWorkflowTemplate()
     {
-        return $this->patchMailTemplate([
+        $this->patchMailTemplate([
             'workflow_notify',
         ]);
     }
@@ -584,7 +654,7 @@ class PatchDataCommand extends Command
      */
     protected function movePluginFolder()
     {
-        return $this->moveAppToStorageFolder('Plugins', Define::DISKNAME_PLUGIN_LOCAL);
+        $this->moveAppToStorageFolder('Plugins', Define::DISKNAME_PLUGIN_LOCAL);
     }
     
     // /**
@@ -876,6 +946,73 @@ class PatchDataCommand extends Command
             });
         });
     }
+    
+    /**
+     * setLoginType
+     *
+     * @return void
+     */
+    protected function setLoginTypeSso()
+    {
+        // patch login provider already logined.
+        \DB::table('login_users')->whereNotNull('login_provider')->where('login_type', LoginType::PURE)->update(['login_type' => LoginType::OAUTH]);
+
+        
+        // update system value
+        System::show_default_login_provider(config('exment.show_default_login_provider', true));
+
+
+        // move to config to database
+        $providers = stringToArray(config('exment.login_providers', ''));
+        foreach ($providers as $provider) {
+            $config = config("services.$provider");
+            if (is_nullorempty($config)) {
+                continue;
+            }
+
+            $oauth_provider_type = Enums\LoginProviderType::getEnum($provider);
+            $oauth_provider_name = !isset($oauth_provider_type) ? $provider : null;
+            $oauth_provider_type = isset($oauth_provider_type) ? $oauth_provider_type->getValue() : Enums\LoginProviderType::OTHER;
+            
+            // check has already executed
+            if (Model\LoginSetting::where('login_type', Enums\LoginType::OAUTH)
+            ->where('options->oauth_provider_type', $oauth_provider_type)
+            ->where('options->oauth_provider_name', $oauth_provider_name)
+            ->count() > 0) {
+                continue;
+            }
+
+            $name = array_get($config, 'display_name') ?? pascalize($provider);
+
+            $login_setting = new Model\LoginSetting([
+                'login_view_name' => $name,
+                'login_type' => Enums\LoginType::OAUTH,
+                'active_flg' => true,
+                'options' => [
+                    'oauth_provider_type' => $oauth_provider_type,
+                    'oauth_provider_name' => $oauth_provider_name,
+                    'oauth_client_id' => array_get($config, 'client_id'),
+                    'oauth_client_secret' => array_get($config, 'client_secret'),
+                    'oauth_redirect_url' => array_get($config, 'redirect'),
+                    'oauth_scope' => array_get($config, 'scope'),
+                    'login_button_label' => exmtrans('login.login_button_format', ['display_name' => $name]),
+                    'login_button_icon' => array_get($config, 'font_owesome'),
+                    'login_button_background_color' => array_get($config, 'background_color'),
+                    'login_button_background_color_hover' => array_get($config, 'background_color_hover'),
+                    'login_button_font_color' => array_get($config, 'font_color'),
+                    'login_button_font_color_hover' => array_get($config, 'font_color_hover'),
+
+                    'mapping_user_column' => 'email',
+                    'sso_jit' => false,
+                    'jit_rolegroups' => [],
+                    'update_user_info' => true,
+                ]
+            ]);
+
+            $login_setting->save();
+        }
+    }
+    
     /**
      * removeStoredRevision
      *
@@ -898,6 +1035,9 @@ class PatchDataCommand extends Command
                 $isUpdate = false;
                 $json = json_decode($input, true);
                 if (is_nullorempty($json)) {
+                    continue;
+                }
+                if (!is_array($json)) {
                     continue;
                 }
                 foreach ($json as $key => &$value) {
@@ -942,5 +1082,225 @@ class PatchDataCommand extends Command
             $plugin->setOption('all_user_enabled', "1");
             $plugin->save();
         });
+    }
+    
+    /**
+     * patchFormColumnRelation
+     *
+     * @return void
+     */
+    protected function patchFormColumnRelation()
+    {
+        if (!canConnection() || !hasTable('custom_form_columns')) {
+            return;
+        }
+        if (boolval(config('exment.select_relation_linkage_disabled', false))) {
+            return;
+        }
+        
+        CustomFormColumn::all()->each(function ($custom_form_column) {
+            if ($custom_form_column->form_column_type != FormColumnType::COLUMN) {
+                return true;
+            }
+
+            $custom_column = CustomColumn::getEloquent($custom_form_column->form_column_target_id);
+            if (!isset($custom_column)) {
+                return true;
+            }
+
+            if (!ColumnType::isSelectTable($custom_column['column_type'])) {
+                return true;
+            }
+
+            if (!is_null($custom_form_column->getOption('relation_filter_target_column_id'))) {
+                return true;
+            }
+
+            // get relation columns.
+            $relationColumn = collect(Model\Linkage::getSelectTableLinkages($custom_column->custom_table_cache, false))
+                ->filter(function ($c) use ($custom_column) {
+                    return $c['searchType'] != Enums\SearchType::MANY_TO_MANY && $c['child_column']->id == $custom_column->id;
+                })->first();
+
+            if (!isset($relationColumn)) {
+                return true;
+            }
+
+            $custom_form_column->setOption('relation_filter_target_column_id', $relationColumn['parent_column']->id);
+            $custom_form_column->save();
+        });
+    }
+
+    /**
+     * clearFormColumnRelation
+     *
+     * @return void
+     */
+    protected function clearFormColumnRelation()
+    {
+        if (!canConnection() || !hasTable('custom_form_columns')) {
+            return;
+        }
+
+        CustomFormColumn::all()->each(function ($custom_form_column) {
+            if (is_null($custom_form_column->getOption('relation_filter_target_column_id'))) {
+                return true;
+            }
+
+            $custom_form_column->forgetOption('relation_filter_target_column_id');
+            $custom_form_column->save();
+        });
+    }
+
+    /**
+     * patchViewColumnSuuid
+     *
+     * @return void
+     */
+    protected function patchViewColumnSuuid()
+    {
+        if (!canConnection() || !hasTable('custom_view_columns')) {
+            return;
+        }
+
+        $classes = [
+            CustomViewColumn::class,
+            CustomViewSummary::class,
+        ];
+        foreach ($classes as $c) {
+            $c::all()->each(function ($v) {
+                if (!is_nullorempty($v->suuid)) {
+                    return true;
+                }
+
+                $v->suuid = short_uuid();
+                $v->save();
+            });
+        }
+    }
+    
+    /**
+     * setEnv
+     *
+     * @return void
+     */
+    protected function setEnv()
+    {
+        if (!canConnection() || !hasTable(SystemTableName::SYSTEM)) {
+            return;
+        }
+
+        if (!boolval(System::initialized())) {
+            return;
+        }
+
+        // write env
+        try {
+            EnvService::setEnv(['EXMENT_INITIALIZE' => 1]);
+        }
+        // if cannot write, nothing do
+        catch (\Exception $ex) {
+        } catch (\Throwable $ex) {
+        }
+    }
+
+    /**
+     * Initialize operation_type in custom_operations.
+     *
+     * @return void
+     */
+    protected function initCustomOperationType()
+    {
+        // remove "role" menu
+        Model\CustomOperation::whereNull('operation_type')
+            ->get()
+            ->each(function ($custom_operation) {
+                $custom_operation->update([
+                    'operation_type' => [Enums\CustomOperationType::BULK_UPDATE],
+                    'options' => ['button_label' => $custom_operation->operation_name],
+                ]);
+
+                $custom_operation->custom_operation_columns->each(function ($custom_operation_column) {
+                    $custom_operation_column->setOption('operation_update_type', Enums\OperationUpdateType::DEFAULT)
+                        ->save();
+                });
+            });
+    }
+        
+    /**
+     * setLoginType
+     *
+     * @return void
+     */
+    protected function patchViewDashboard()
+    {
+        if (!canConnection() || !hasTable(SystemTableName::SYSTEM)) {
+            return;
+        }
+
+        // update system value
+        System::userdashboard_available(!boolval(config('exment.userdashboard_disabled', true)));
+        System::userview_available(!boolval(config('exment.userview_disabled', true)));
+    }
+
+
+    /**
+     *
+     * @return void
+     */
+    protected function patchViewOnly()
+    {
+        Model\CustomFormColumn::get()
+        ->each(function ($custom_form_column) {
+            $read_only = array_get($custom_form_column, 'options.read_only');
+            $view_only = array_get($custom_form_column, 'options.view_only');
+
+            if (!is_null($read_only)) {
+                return;
+            }
+            if (boolval($view_only)) {
+                $custom_form_column->setOption('read_only', "1")
+                    ->forgetOption('view_only')
+                    ->save();
+            }
+        });
+    }
+
+
+    protected function updateNotifyDifinition()
+    {
+        Model\Notify::get()
+        ->each(function ($notify) {
+            $notify_actions = array_filter(stringToArray($notify->notify_actions), function ($notify_action) {
+                return !is_nullorempty($notify_action);
+            });
+            if (count($notify_actions) == 0) {
+                $notify_actions = [Enums\NotifyAction::SHOW_PAGE];
+            }
+
+            $action_settings_array = [];
+
+            foreach ($notify_actions as $notify_action) {
+                $action_settings = $notify->action_settings;
+                $item = [
+                    'notify_action' => $notify_action,
+                    'webhook_url' => array_get($action_settings, 'webhook_url'),
+                    'notify_action_target' => array_get($action_settings, 'notify_action_target'),
+                ];
+
+                $action_settings_array[] = $item;
+            }
+
+            $notify->mail_template_id = array_get($notify->action_settings, 'mail_template_id');
+            $notify->action_settings = $action_settings_array;
+            $notify->save();
+        });
+
+        if (!boolval(config('exment.notify_skip_self_target', true))) {
+            Model\Notify::whereIn('notify_trigger', [Enums\NotifyTrigger::CREATE_UPDATE_DATA, Enums\NotifyTrigger::WORKFLOW])->get()
+                ->each(function ($notify) {
+                    $notify->setTriggerSetting('notify_myself', true)->save();
+                });
+        }
     }
 }

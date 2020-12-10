@@ -1,6 +1,6 @@
 
 <div id="has-many-table-{{$column}}" class="form-group has-many-table-div">
-    @if($header)
+    @if($enableHeader)
     <div class="row">
         <div class="col-sm-12">
             <h4 class="field-header">{{ $label }}</h4>
@@ -12,7 +12,11 @@
     
     @if(isset($description))
         <div class="col-sm-{{$tablewidth['width']}} col-sm-offset-{{$tablewidth['offset']}}" style="margin-bottom:20px;">
+            @if($escapeDescription)
+            {{ $description }}
+            @else
             {!! $description !!}
+            @endif
         </div>
     @endif
     <div class="col-sm-{{$tablewidth['width']}} col-sm-offset-{{$tablewidth['offset']}}">

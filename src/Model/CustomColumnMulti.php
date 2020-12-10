@@ -2,6 +2,7 @@
 
 namespace Exceedone\Exment\Model;
 
+use Exceedone\Exment\Enums\CompareColumnType;
 use Exceedone\Exment\Enums\FilterOption;
 
 /**
@@ -11,11 +12,11 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
 {
     use Traits\AutoSUuidTrait;
     use Traits\UseRequestSessionTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\TemplateTrait;
     use Traits\UniqueKeyCustomColumnTrait;
 
-    protected $appends = ['unique1', 'unique2', 'unique3', 'compare_column1_id', 'compare_column2_id', 'compare_type', 'table_label_id'];
+    protected $appends = ['unique1', 'unique2', 'unique3', 'compare_column1_id', 'compare_column2_id', 'compare_type', 'table_label_id', 'share_trigger_type', 'share_column_id', 'share_permission'];
     protected $casts = ['options' => 'json'];
     protected $guarded = ['id', 'suuid'];
     protected $table = 'custom_column_multisettings';
@@ -28,7 +29,7 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
     public static $templateItems = [
         'excepts' => [
             'export' => [
-                'unique1', 'unique2', 'unique3', 'compare_type', 'options.unique1_id', 'options.unique2_id', 'options.unique3_id', 'options.compare_column1_id', 'options.compare_column2_id', 'options.table_label_id'
+                'unique1', 'unique2', 'unique3', 'share_column_id', 'compare_type', 'options.unique1_id', 'options.unique2_id', 'options.unique3_id', 'options.compare_column1_id', 'options.compare_column2_id', 'options.table_label_id', 'options.share_trigger_type', 'options.share_column_id', 'options.share_permission'
             ],
             'import' => [
                 'custom_table_id', 'column_name'
@@ -109,7 +110,18 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
                 'uniqueKeyFunction' => 'getUniqueKeyValues',
                 'uniqueKeyFunctionArgs' => ['compare_column2_id'],
             ],
-
+            [
+                'replaceNames' => [
+                    [
+                        'replacedName' => [
+                            'table_name' => 'options.share_table_name',
+                            'column_name' => 'options.share_column_name',
+                        ]
+                    ]
+                ],
+                'uniqueKeyFunction' => 'getUniqueKeyValues',
+                'uniqueKeyFunctionArgs' => ['share_column_id'],
+            ],
             [
                 'replaceNames' => [
                     [
@@ -125,15 +137,6 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
         ]
     ];
 
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    
     public function getUnique1Attribute()
     {
         return $this->getOption('unique1_id');
@@ -164,6 +167,35 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
         return $this;
     }
     
+    public function getShareTriggerTypeAttribute()
+    {
+        return $this->getOption('share_trigger_type');
+    }
+    public function setShareTriggerTypeAttribute($share_trigger_type)
+    {
+        $this->setOption('share_trigger_type', $share_trigger_type);
+        return $this;
+    }
+
+    public function getShareColumnIdAttribute()
+    {
+        return $this->getOption('share_column_id');
+    }
+    public function setShareColumnIdAttribute($share_column_id)
+    {
+        $this->setOption('share_column_id', $share_column_id);
+        return $this;
+    }
+
+    public function getSharePermissionAttribute()
+    {
+        return $this->getOption('share_permission');
+    }
+    public function setSharePermissionAttribute($share_permission)
+    {
+        $this->setOption('share_permission', $share_permission);
+        return $this;
+    }
 
     public function getCompareColumn1IdAttribute()
     {
@@ -185,6 +217,11 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
         return $this;
     }
     
+    public function getShareColumnAttribute()
+    {
+        return CustomColumn::getEloquent($this->share_column_id);
+    }
+    
     public function getCompareColumn1Attribute()
     {
         return CustomColumn::getEloquent($this->compare_column1_id);
@@ -192,6 +229,9 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
 
     public function getCompareColumn2Attribute()
     {
+        if (in_array($this->compare_column2_id, CompareColumnType::arrays())) {
+            return $this->compare_column2_id;
+        }
         return CustomColumn::getEloquent($this->compare_column2_id);
     }
 
@@ -220,7 +260,8 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
     /**
      * Compare two value.
      *
-     * @param [type] $value
+     * @param array $input
+     * @param CustomValue|null $custom_value
      * @return bool
      */
     public function compareValue($input, $custom_value = null)
@@ -234,6 +275,10 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
 
         // get value function
         $getValueFunc = function ($input, $column, $custom_value) {
+            if (is_string($column)) {
+                return CompareColumnType::getCompareValue($column);
+            }
+
             // if key has value in input
             if (array_has($input, 'value.' . $column->column_name)) {
                 return array_get($input, 'value.' . $column->column_name);
@@ -295,9 +340,22 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
 
     public function getCompareErrorMessage($transKey, $column1, $column2)
     {
+        $attribute1 = null;
+        $attribute2 = null;
+        if ($column1 instanceof CustomColumn) {
+            $attribute1 = $column1->column_view_name;
+        }
+        if ($column2 instanceof CustomColumn) {
+            $attribute2 = $column2->column_view_name;
+        } elseif (is_string($column2)) {
+            $enum = CompareColumnType::getEnum($column2);
+            if ($enum) {
+                $attribute2 = $enum->transKey('custom_table.custom_column_multi.compare_column_options');
+            }
+        }
         return exmtrans($transKey, [
-            'attribute1' => $column1->column_view_name,
-            'attribute2' => $column2->column_view_name,
+            'attribute1' => $attribute1,
+            'attribute2' => $attribute2,
         ]);
     }
 
@@ -307,9 +365,8 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
     /**
      * Set json value calling import
      *
-     * @param [type] $json
+     * @param array $json
      * @param array $options
-     * @return void
      */
     protected static function importReplaceJson(&$json, $options = [])
     {
@@ -318,14 +375,16 @@ class CustomColumnMulti extends ModelBase implements Interfaces\TemplateImporter
         static::importReplaceJsonTableColumn('unique3', $json);
         static::importReplaceJsonTableColumn('compare_column1', $json);
         static::importReplaceJsonTableColumn('compare_column2', $json);
+        static::importReplaceJsonTableColumn('share', $json, 'share_column_id');
         static::importReplaceJsonTableColumn('table_label', $json);
     }
 
     /**
      * Set json value calling import
      *
-     * @param [type] $json
-     * @param array $options
+     * @param string $key
+     * @param array $json
+     * @param string|null $set_key_name
      * @return void
      */
     protected static function importReplaceJsonTableColumn($key, &$json, $set_key_name = null)

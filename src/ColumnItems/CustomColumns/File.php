@@ -4,9 +4,11 @@ namespace Exceedone\Exment\ColumnItems\CustomColumns;
 
 use Exceedone\Exment\ColumnItems\CustomItem;
 use Encore\Admin\Form\Field;
+use Exceedone\Exment\Grid\Filter\Where as ExmWhere;
 use Exceedone\Exment\Model\File as ExmentFile;
 use Exceedone\Exment\Model\System;
 use Exceedone\Exment\Model\Define;
+use Exceedone\Exment\Enums\UrlTagType;
 use Exceedone\Exment\Validator;
 
 class File extends CustomItem
@@ -16,32 +18,33 @@ class File extends CustomItem
      */
     public function file()
     {
-        return ExmentFile::getFile($this->fileValue());
+        return ExmentFile::getFile($this->fileValue($this->value));
     }
 
     /**
      * get text
      */
-    public function text()
+    protected function _text($v)
     {
         // get image url
-        return ExmentFile::getUrl($this->fileValue(), boolval(array_get($this->options, 'asApi')));
+        return ExmentFile::getUrl($this->fileValue($v), boolval(array_get($this->options, 'asApi')));
     }
 
     /**
      * get html. show link to file
      */
-    public function html()
+    protected function _html($v)
     {
         // get image url
-        $url = ExmentFile::getUrl($this->fileValue());
-        $file = ExmentFile::getData($this->fileValue());
+        $url = ExmentFile::getUrl($this->fileValue($v));
+        $file = ExmentFile::getData($this->fileValue($v));
         if (!isset($url)) {
             return $url;
         }
-
-        $title = exmtrans('common.download');
-        return "<a href='$url' target='_blank' data-toggle='tooltip' title='$title'>".esc_html($file->filename).'</a>';
+        
+        return \Exment::getUrlTag($url, $file->filename, UrlTagType::BLANK, [], [
+            'tooltipTitle' => exmtrans('common.download'),
+        ]);
     }
 
     /**
@@ -53,8 +56,32 @@ class File extends CustomItem
      */
     public function getImportValue($value, $setting = [])
     {
+        if (is_nullorempty($value)) {
+            return [
+                'skip' => true,
+            ];
+        }
+
+        // Get file info by url
+        // only check by uuid
+        $uuid = pathinfo(trim($value, '/'), PATHINFO_FILENAME);
+        if (is_nullorempty($uuid)) {
+            return [
+                'skip' => true,
+            ];
+        }
+
+        $file = ExmentFile::where('uuid', $uuid)->first();
+        if (!isset($file)) {
+            return [
+                'skip' => true,
+            ];
+        }
+
+        // return file path
         return [
-            'skip' => true,
+            'result' => true,
+            'value' => $file->path,
         ];
     }
 
@@ -63,6 +90,11 @@ class File extends CustomItem
         return Field\File::class;
     }
     
+    protected function getAdminFilterClass()
+    {
+        return ExmWhere::class;
+    }
+
     protected function setAdminOptions(&$field, $form_column_options)
     {
         // set file options
@@ -93,7 +125,8 @@ class File extends CustomItem
                     Field::FILE_DELETE_FLAG         => $custom_column->column_name,
                     '_token'                         => csrf_token(),
                     '_method'                        => 'PUT',
-                ]
+                ],
+                'deletedEvent' => 'Exment.CommonEvent.CallbackExmentAjax(jqXHR.responseJSON);',
             ]
         );
     }
@@ -126,19 +159,19 @@ class File extends CustomItem
     /**
      * Get File Value. checking array
      *
-     * @return void
+     * @return string
      */
-    protected function fileValue()
+    protected function fileValue($v)
     {
-        if (is_null($this->value)) {
+        if (is_null($v)) {
             return null;
         }
 
-        if (is_array($this->value)) {
-            return count($this->value) == 0 ? null : $this->value[0];
+        if (is_array($v)) {
+            return count($v) == 0 ? null : $v[0];
         }
 
-        return $this->value;
+        return $v;
     }
 
     protected function setValidates(&$validates, $form_column_options)
@@ -176,5 +209,83 @@ class File extends CustomItem
         });
 
         return $field;
+    }
+    
+
+    public function getAdminFilterWhereQuery($query, $input)
+    {
+        list($mark, $value) = \Exment::getQueryMarkAndValue(true, $input);
+        // get values ids
+        $ids = $this->getQueryIds($mark, $value);
+        if (is_nullorempty($ids)) {
+            $query->whereRaw("0 = 1");
+        }
+        
+        $query->whereOrIn('id', $ids);
+    }
+    
+
+    /**
+     * Get Search queries for free text search
+     *
+     * @param string $mark
+     * @param string $value
+     * @param int $takeCount
+     * @param string|null $q
+     * @return array
+     */
+    public function getSearchQueries($mark, $value, $takeCount, $q, $options = [])
+    {
+        // get values ids
+        $ids = $this->getQueryIds($mark, $value);
+        if (is_nullorempty($ids)) {
+            return [];
+        }
+        
+        $query = $this->custom_table->getValueModel()->query();
+        $query->whereOrIn('id', $ids)->select('id');
+        
+        $query->take($takeCount);
+
+        return [$query];
+    }
+
+    /**
+     * Set Search orWhere for free text search
+     *
+     * @param Builder $mark
+     * @param string $mark
+     * @param string $value
+     * @param string|null $q
+     * @return void
+     */
+    public function setSearchOrWhere(&$query, $mark, $value, $q)
+    {
+        $ids = $this->getQueryIds($mark, $value);
+        if (is_nullorempty($ids)) {
+            return $this;
+        }
+        $query->orWhereIn('id', $ids);
+
+        return $this;
+    }
+
+    /**
+     * Get query search bar
+     *
+     * @param string $mark
+     * @param string $value
+     * @return array target custom values's id list
+     */
+    protected function getQueryIds($mark, $value)
+    {
+        ///// first, search document table
+        $file_query = ExmentFile::query();
+        // get values
+        return $file_query->where('custom_column_id', $this->custom_column->id)
+            ->where('parent_type', $this->custom_table->table_name)
+            ->where('filename', $mark, $value)
+            ->select(['parent_id'])
+            ->get()->pluck('parent_id');
     }
 }

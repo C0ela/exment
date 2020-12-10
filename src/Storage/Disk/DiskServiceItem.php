@@ -2,14 +2,21 @@
 
 namespace Exceedone\Exment\Storage\Disk;
 
-use Exceedone\Exment\Model\File;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Contracts\Filesystem\Filesystem;
 
 /**
  * Disk Service Item.
  */
 class DiskServiceItem
 {
+    /**
+     * Construct
+     *
+     * @param Filesystem $disk
+     * @param string $fileName
+     * @param string $dirName
+     */
     public function __construct($disk, $fileName, $dirName)
     {
         $this->disk = $disk;
@@ -34,6 +41,8 @@ class DiskServiceItem
     /**
      * Storage disk
      *
+     * @var Filesystem disk
+     *
      */
     protected $disk;
 
@@ -55,14 +64,14 @@ class DiskServiceItem
     protected function initializeDirectory()
     {
         if (!is_null($this->dirName) && !$this->disk->exists($this->dirName)) {
-            $this->disk->makeDirectory($this->dirName, 0755, true);
+            $this->disk->makeDirectory($this->dirName);
         }
     }
 
     /**
      * return this disk
      *
-     * @return void
+     * @return Filesystem
      */
     public function disk()
     {

@@ -6,21 +6,22 @@ use Encore\Admin\Form\Field\Date;
 use Encore\Admin\Form\Field\Select;
 use Encore\Admin\Form\Field\Text;
 use Exceedone\Exment\Form\Field;
-use Exceedone\Exment\Enums\SummaryCondition;
 use Exceedone\Exment\Enums\SystemColumn;
 use Exceedone\Exment\Enums\SystemTableName;
 use Exceedone\Exment\Enums\FilterType;
 use Exceedone\Exment\Model\CustomTable;
-use Exceedone\Exment\Model\CustomColumn;
+use Exceedone\Exment\Model\CustomRelation;
 use Exceedone\Exment\Model\Traits\ColumnOptionQueryTrait;
 
 class SystemItem implements ItemInterface
 {
-    use ItemTrait, ColumnOptionQueryTrait;
+    use ItemTrait, SystemColumnItemTrait, SummaryItemTrait, ColumnOptionQueryTrait;
     
     protected $column_name;
     
     protected $custom_table;
+    
+    protected $custom_value;
     
     public function __construct($custom_table, $column_name, $custom_value)
     {
@@ -62,12 +63,22 @@ class SystemItem implements ItemInterface
     }
 
     /**
+     * Get API column name
+     *
+     * @return string
+     */
+    public function apiName()
+    {
+        return $this->_apiName();
+    }
+
+    /**
      * get column key refer to subquery.
      */
     public function getGroupName()
     {
         if (boolval(array_get($this->options, 'summary'))) {
-            $summary_condition = SummaryCondition::getSummaryCondition(array_get($this->options, 'summary_condition'));
+            $summary_condition = $this->getSummaryConditionName();
             $alter_name = $this->sqlAsName();
             $raw = "$summary_condition($alter_name) AS $alter_name";
             return \DB::raw($raw);
@@ -82,8 +93,7 @@ class SystemItem implements ItemInterface
     {
         $column_name = $this->getSqlColumnName();
 
-        $summary_option = array_get($this->options, 'summary_condition');
-        $summary_condition = is_null($summary_option)? null: SummaryCondition::getEnum($summary_option)->lowerKey();
+        $summary_condition = $this->getSummaryConditionName();
         $group_condition = array_get($this->options, 'group_condition');
 
         if (isset($summary_condition)) {
@@ -141,24 +151,52 @@ class SystemItem implements ItemInterface
     public function index()
     {
         $option = $this->getSystemColumnOption();
-        return array_get($option, 'sqlname', $this->name());
+        return getDBTableName($this->custom_table) .'-'. array_get($option, 'sqlname', $this->name());
+    }
+
+    /**
+     * get pure value. (In database value)
+     */
+    protected function _pureValue($v)
+    {
+        // convert to string if datetime
+        $option = $this->getSystemColumnOption();
+        if (array_get($option, 'type') == 'datetime') {
+            if ($v instanceof \Carbon\Carbon) {
+                return $v->__toString();
+            }
+        }
+        return $v;
+    }
+
+    /**
+     * get pure value. (In database value)
+     */
+    protected function _value($v)
+    {
+        return $v;
     }
 
     /**
      * get text(for display)
      */
-    public function text()
+    protected function _text($v)
     {
-        return $this->getTargetValue(false);
+        return $this->_pureValue($v);
     }
 
     /**
      * get html(for display)
      * *this function calls from non-escaping value method. So please escape if not necessary unescape.
      */
-    public function html()
+    protected function _html($v)
     {
-        return $this->getTargetValue(true);
+        $option = $this->getSystemColumnOption();
+        if (!is_null($keyname = array_get($option, 'tagname'))) {
+            // not escape because return html
+            return array_get($this->custom_value, $keyname);
+        }
+        return esc_html($this->_text($v));
     }
 
     /**
@@ -191,21 +229,10 @@ class SystemItem implements ItemInterface
 
     public function setCustomValue($custom_value)
     {
-        // if options has "view_pivot_column", get select_table's custom_value first
-        if (isset($custom_value) && array_key_value_exists('view_pivot_column', $this->options)) {
-            $view_pivot_column = $this->options['view_pivot_column'];
-            if ($view_pivot_column == SystemColumn::PARENT_ID) {
-                $custom_value = $this->custom_table->getValueModel($custom_value->parent_id);
-            } else {
-                $pivot_custom_column = CustomColumn::getEloquent($this->options['view_pivot_column']);
-                $pivot_id =  array_get($custom_value, 'value.'.$pivot_custom_column->column_name);
-                $custom_value = $this->custom_table->getValueModel($pivot_id);
-            }
-        }
-
         $this->custom_value = $custom_value;
         if (isset($custom_value)) {
             $this->id = array_get($custom_value, 'id');
+            $this->value = $this->getTargetValue($custom_value);
         }
 
         $this->prepare();
@@ -218,22 +245,29 @@ class SystemItem implements ItemInterface
         return $this->custom_table;
     }
 
-    protected function getTargetValue($html)
+    /**
+     * Get relation.
+     *
+     * @return CustomRelation|null
+     */
+    public function getRelation()
+    {
+        return $this->getRelationTrait();
+    }
+
+    protected function getTargetValue($custom_value)
     {
         // if options has "summary" (for summary view)
         if (boolval(array_get($this->options, 'summary'))) {
-            return array_get($this->custom_value, $this->sqlAsName());
+            return array_get($custom_value, $this->sqlAsName());
         }
 
-        if ($html) {
-            $option = $this->getSystemColumnOption();
-            if (!is_null($keyname = array_get($option, 'tagname'))) {
-                return array_get($this->custom_value, $keyname);
-            }
+        // if options has "view_pivot_column", get select_table's custom_value first
+        if (isset($custom_value) && array_key_value_exists('view_pivot_column', $this->options)) {
+            return $this->getViewPivotValue($custom_value, $this->options);
         }
 
-        $val = array_get($this->custom_value, $this->column_name);
-        return $html ? esc_html($val) : $val;
+        return array_get($custom_value, $this->column_name);
     }
     
     public function getAdminField($form_column = null, $column_name_prefix = null)

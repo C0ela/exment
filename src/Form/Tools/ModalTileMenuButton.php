@@ -27,18 +27,19 @@ class ModalTileMenuButton extends ModalMenuButton
      * 			   href
      * 			   label
      *
-     * @param [type] $items
-     * @return void
+     * @param array $items
+     * @return $this
      */
     public function groups($groups)
     {
         $this->groups = $groups;
+        return $this;
     }
 
     /**
      * Get tile html
      *
-     * @return void
+     * @return string
      */
     public function html()
     {

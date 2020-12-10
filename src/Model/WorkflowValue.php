@@ -63,9 +63,9 @@ class WorkflowValue extends ModelBase
 
     public function getWorkflowEditableAttribute()
     {
-        $status = $this->getWorkflowStatusAttribute();
+        $status = $this->workflow_status_cache;
 
-        return isset($status)? ($status->editable_flg == 1): true;
+        return isset($status) ? ($status->editable_flg == 1): true;
     }
 
     /**
@@ -100,9 +100,20 @@ class WorkflowValue extends ModelBase
     }
     
     /**
+     * this workflow is completed
+     *
+     * @return bool
+     */
+    public function isCompleted() : bool
+    {
+        $statusTo = $this->workflow_status_cache;
+        return WorkflowStatus::getWorkflowStatusCompleted($statusTo);
+    }
+
+    /**
      * Whether already executed workflow
      *
-     * @return void
+     * @return bool
      */
     public static function isAlreadyExecuted($action_id, $custom_value, $targetUser)
     {
@@ -113,6 +124,7 @@ class WorkflowValue extends ModelBase
             ->where('workflow_action_id', $action_id)
             ->count() > 0;
     }
+
     
     public function deletingChildren()
     {

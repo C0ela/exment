@@ -8,7 +8,7 @@ class CustomFormBlock extends ModelBase implements Interfaces\TemplateImporterIn
 {
     use Traits\UseRequestSessionTrait;
     use Traits\ClearCacheTrait;
-    use Traits\DatabaseJsonTrait;
+    use Traits\DatabaseJsonOptionTrait;
     use Traits\TemplateTrait;
     
     protected $casts = ['options' => 'json'];
@@ -60,23 +60,6 @@ class CustomFormBlock extends ModelBase implements Interfaces\TemplateImporterIn
         return $this->belongsTo(CustomTable::class, 'form_block_target_table_id');
     }
     
-    public function getOption($key, $default = null)
-    {
-        return $this->getJson('options', $key, $default);
-    }
-    public function setOption($key, $val = null, $forgetIfNull = false)
-    {
-        return $this->setJson('options', $key, $val, $forgetIfNull);
-    }
-    public function forgetOption($key)
-    {
-        return $this->forgetJson('options', $key);
-    }
-    public function clearOption()
-    {
-        return $this->clearJson('options');
-    }
-    
     public function isMultipleColumn()
     {
         foreach ($this->custom_form_columns as $custom_form_column) {
@@ -85,6 +68,27 @@ class CustomFormBlock extends ModelBase implements Interfaces\TemplateImporterIn
             }
         }
         return false;
+    }
+
+    
+    /**
+     * get relation name etc for form block
+     */
+    public function getRelationInfo()
+    {
+        $target_table = $this->target_table;
+        // get label hasmany
+        $block_label = $this->form_block_view_name;
+        if (!isset($block_label)) {
+            $enum = FormBlockType::getEnum(array_get($this, 'form_block_type'));
+            $block_label = exmtrans("custom_form.table_".$enum->lowerKey()."_label") . $target_table->table_view_name;
+        }
+        // get form columns count
+        $form_block_options = array_get($this, 'options', []);
+        $relation = CustomRelation::getRelationByParentChild($this->custom_form->custom_table, $target_table);
+        $relation_name = $relation ? $relation->getRelationName() : null;
+        
+        return [$relation, $relation_name, $block_label];
     }
 
     protected static function importReplaceJson(&$json, $options = [])
@@ -98,6 +102,7 @@ class CustomFormBlock extends ModelBase implements Interfaces\TemplateImporterIn
 
         // get form_block_type
         if (!isset($json['form_block_type'])) {
+            $target_table = CustomTable::getEloquent($json['form_block_target_table_name']);
             $self = $target_table->id == $custom_table->id;
             if ($self) {
                 $form_block_type = FormBlockType::DEFAULT;

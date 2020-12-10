@@ -22,7 +22,7 @@ class Tile extends Field
     {
         parent::__construct($column, $arguments);
 
-        $this->multiple = false;
+        $this->multipled = false;
     }
 
     /**
@@ -35,9 +35,9 @@ class Tile extends Field
     public function options($options = [])
     {
         // remote options
-        if (is_string($options)) {
-            return $this->loadRemoteOptions(...func_get_args());
-        }
+        // if (is_string($options)) {
+        //     return $this->loadRemoteOptions(...func_get_args());
+        // }
 
         if ($options instanceof Arrayable) {
             $options = $options->toArray();
@@ -93,7 +93,7 @@ class Tile extends Field
         // template search url
         $this->script = <<<EOT
     
-    $(document).on('click', '[data-ajax-link]', {}, function(ev){
+    $(document).on('click.exment_tile', '[data-ajax-link]', {}, function(ev){
         searchTemplate(null, $(ev.target).data('ajax-link'));
     });
 

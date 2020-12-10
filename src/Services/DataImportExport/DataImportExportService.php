@@ -10,6 +10,7 @@ use Exceedone\Exment\Enums\ColumnType;
 use Exceedone\Exment\Enums\PluginType;
 use Exceedone\Exment\ColumnItems\ParentItem;
 use Exceedone\Exment\Form\Widgets\ModalForm;
+use Exceedone\Exment\Services\DataImportExport\Formats\FormatBase;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Validator;
@@ -94,6 +95,9 @@ class DataImportExportService extends AbstractExporter
         
         if ($args instanceof UploadedFile) {
             $format = $args->extension();
+            if ($args->getClientMimeType() === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+                $format = "xlsx";
+            }
         } elseif (is_string($args)) {
             $format = $args;
         } elseif (array_has($args, 'format')) {
@@ -168,11 +172,9 @@ class DataImportExportService extends AbstractExporter
         $response->send();
         exit;
     }
-
-
     
     /**
-     * @param $request
+     * @param Request $request
      * @return mixed|void error message or success message etc...
      */
     public function import($request)
@@ -230,30 +232,101 @@ class DataImportExportService extends AbstractExporter
         return $response;
     }
 
+    
+    /**
+     * @param string $file_path
+     * @param array  $options
+     * @return array error message or success message etc...
+     */
+    public function importBackground($file_path, array $options = [])
+    {
+        setTimeLimitLong();
+
+        $this->format->filebasename($this->filebasename);
+
+        // get table data
+        if (method_exists($this->importAction, 'getDataTable')) {
+            $datalist = $this->importAction->getDataTable($file_path);
+        } else {
+            $datalist = $this->format->getDataTable($file_path, $options);
+        }
+        // filter data
+        $datalist = $this->importAction->filterDatalist($datalist);
+
+        if (count($datalist) == 0) {
+            return [
+                'result' => false,
+                'message' => exmtrans('error.failure_import_file')
+            ];
+        }
+
+        return $this->importAction->importChunk($datalist, $options);
+    }
+    
+    /**
+     * execute export background
+     */
+    public function exportBackground(array $options = [])
+    {
+        setTimeLimitLong();
+
+        if ($options['action'] == 'view' && isset($this->viewExportAction)) {
+            $datalist = $this->viewExportAction->datalist();
+        } else {
+            $datalist = $this->exportAction->datalist();
+        }
+
+        $files = $this->format
+            ->datalist($datalist)
+            ->filebasename($this->filebasename() ?? $this->exportAction->filebasename())
+            ->createFile();
+
+        if ($this->exportAction->getCount() == 0 && boolval(array_get($options, 'breakIfEmpty', false))) {
+            return [
+                'status' => 1,
+                'message' => exmtrans('common.message.notfound'),
+            ];
+        }
+    
+        $this->format->saveAsFile($options['dirpath'], $files);
+
+        return [
+            'status' => 0,
+            'message' => exmtrans('command.export.success_message', $options['dirpath']),
+            'dirpath' => $options['dirpath'],
+        ];
+    }
+
     /**
      * import data by custom logic
-     * @param $import_plugin
+     * @param int|string $import_plugin
+     * @param mixed $file
      */
     protected function customImport($import_plugin, $file)
     {
         $plugin = Plugin::find($import_plugin);
         $batch = $plugin->getClass(PluginType::IMPORT, ['file' => $file]);
         $result = $batch->execute();
-        if ($result === false) {
-            return [
-                'result' => false,
-                'toastr' => exmtrans('common.message.import_error')
-            ];
+        if (gettype($result) == 'boolean') {
+            if ($result === false) {
+                return [
+                    'result' => false,
+                    'toastr' => exmtrans('common.message.import_error')
+                ];
+            } else {
+                return [
+                    'result' => true,
+                    'toastr' => exmtrans('common.message.import_success')
+                ];
+            }
         } else {
-            return [
-                'result' => true,
-                'toastr' => exmtrans('common.message.import_success')
-            ];
+            return $result;
         }
     }
 
+    
     /**
-     * @param $request
+     * @param Request $request
      * @return bool
      */
     public function validateRequest($request)
@@ -296,14 +369,25 @@ class DataImportExportService extends AbstractExporter
         return true;
     }
 
-    // Import Modal --------------------------------------------------
+    /**
+     * Import Modal
+     *
+     * @param array $pluginlist
+     * @return array
+     */
     public function getImportModal($pluginlist = null)
     {
         // create form fields
         $form = new ModalForm();
 
-        $fileOption = Define::FILE_OPTION();
-        
+        $fileOption = array_merge(
+            Define::FILE_OPTION(),
+            [
+                'showPreview' => false,
+                'dropZoneEnabled' => false,
+            ]
+        );
+
         // import formats
         $formats = [];
         // check config value
@@ -315,7 +399,7 @@ class DataImportExportService extends AbstractExporter
             $formats['excel'] = 'xlsx';
         }
 
-        $form->description('<span class="red">' . exmtrans('common.help.import_max_row_count', [
+        $form->descriptionHtml('<span class="red">' . exmtrans('common.help.import_max_row_count', [
             'count' => config('exment.import_max_row_count', 1000),
             'manual' => \getManualUrl('data_bulk_insert')
         ]) . '</span>')
@@ -375,6 +459,9 @@ class DataImportExportService extends AbstractExporter
     
     /**
      * get primary key list.
+     *
+     * @param CustomTable $custom_table
+     * @return array
      */
     protected static function getPrimaryKeys($custom_table)
     {
@@ -403,10 +490,10 @@ class DataImportExportService extends AbstractExporter
     /**
      * Replace custom value's data array. For import. Calling custom_value import, API POST, API PUT
      *
-     * @param [type] $custom_columns
-     * @param [type] $data
+     * @param \Illuminate\Support\Collection $custom_columns
+     * @param array $data
      * @param array $options
-     * @return void
+     * @return array
      */
     public static function processCustomValue($custom_columns, $data, $options = [])
     {
@@ -441,7 +528,7 @@ class DataImportExportService extends AbstractExporter
             } elseif ($key == Define::PARENT_ID_NAME && isset($value)) {
                 // convert target key's id
                 if (array_has($options, 'setting')) {
-                    $s = collect($options['setting'])->filter(function ($s) use ($key) {
+                    $s = collect($options['setting'])->filter(function ($s) {
                         return isset($s['target_column_name']) && $s['column_name'] == Define::PARENT_ID_NAME;
                     })->first();
                 }

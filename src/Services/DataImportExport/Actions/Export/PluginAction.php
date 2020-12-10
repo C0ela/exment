@@ -26,7 +26,7 @@ class PluginAction extends CustomTableAction
 
     public function plugin($plugin)
     {
-        $this->plugin = Plugin::getEloquent($plugin);
+        $this->plugin = Plugin::getPluginByUUID($plugin);
 
         return $this;
     }
@@ -39,7 +39,7 @@ class PluginAction extends CustomTableAction
         $providers[] = new Export\SummaryProvider([
             'custom_table' => $this->custom_table,
             'custom_view' => $this->custom_view,
-            'is_summary' => $this->is_summary,
+            //'is_summary' => $this->is_summary,
             'grid' => $this->grid
         ]);
         
@@ -50,6 +50,7 @@ class PluginAction extends CustomTableAction
             }
 
             $datalist[] = ['name' => $provider->name(), 'outputs' => $provider->data()];
+            $this->count .= $provider->getCount();
         }
 
         return $datalist;
@@ -62,7 +63,7 @@ class PluginAction extends CustomTableAction
      */
     public function execute()
     {
-        $this->plugin(request()->get('plugin_id'));
+        $this->plugin(request()->get('plugin_uuid'));
 
         $pluginClass = $this->plugin->getClass(PluginType::EXPORT);
 

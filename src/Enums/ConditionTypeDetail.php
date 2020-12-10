@@ -5,15 +5,33 @@ namespace Exceedone\Exment\Enums;
 use Exceedone\Exment\Model\RoleGroup;
 use Exceedone\Exment\ConditionItems;
 
+/**
+ * Conditiion Difinition.
+ *
+ * @method static ConditionTypeDetail USER()
+ * @method static ConditionTypeDetail ORGANIZATION()
+ * @method static ConditionTypeDetail ROLE()
+ * @method static ConditionTypeDetail SYSTEM()
+ * @method static ConditionTypeDetail FORM()
+ * @method static ConditionTypeDetail COLUMN()
+ */
 class ConditionTypeDetail extends EnumBase
 {
-    use EnumOptionTrait;
-    
     const USER = "1";
     const ORGANIZATION = "2";
     const ROLE = "3";
     const SYSTEM = "4";
+    const FORM = "5";
     const COLUMN = "9";
+
+    public static function CONDITION_OPTIONS()
+    {
+        return [
+            static::USER(),
+            static::ORGANIZATION(),
+            static::ROLE(),
+        ];
+    }
 
     public static function SYSTEM_TABLE_OPTIONS($form_priority_type)
     {
@@ -57,6 +75,8 @@ class ConditionTypeDetail extends EnumBase
                 return new ConditionItems\SystemItem($custom_table, $target);
             case ConditionTypeDetail::COLUMN:
                 return new ConditionItems\ColumnItem($custom_table, $target);
+            case ConditionTypeDetail::FORM:
+                return new ConditionItems\FormDataItem($custom_table, $target);
         }
     }
 }

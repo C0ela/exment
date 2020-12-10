@@ -9,9 +9,8 @@ use Encore\Admin\Layout\Content;
 use Encore\Admin\Layout\Row;
 use Encore\Admin\Grid\Linker;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Exceedone\Exment\Model\CustomTable;
-use Exceedone\Exment\Model\CustomColumn;
-use Exceedone\Exment\Model\CustomRelation;
 use Exceedone\Exment\Model\Notify;
 use Exceedone\Exment\Model\Define;
 use Exceedone\Exment\Model\Menu;
@@ -28,6 +27,9 @@ use Exceedone\Exment\Enums\MenuType;
 use Exceedone\Exment\Enums\Permission;
 use Exceedone\Exment\Enums\FormActionType;
 use Exceedone\Exment\Enums\MultisettingType;
+use Exceedone\Exment\Enums\ShareTrigger;
+use Exceedone\Exment\Enums\SharePermission;
+use Exceedone\Exment\Enums\CompareColumnType;
 
 class CustomTableController extends AdminControllerBase
 {
@@ -35,7 +37,7 @@ class CustomTableController extends AdminControllerBase
 
     protected $exists = false;
 
-    public function __construct(Request $request)
+    public function __construct()
     {
         $this->setPageInfo(exmtrans("custom_table.header"), exmtrans("custom_table.header"), exmtrans("custom_table.description"), 'fa-table');
     }
@@ -65,7 +67,7 @@ class CustomTableController extends AdminControllerBase
         $grid = new Grid(new CustomTable);
         $grid->column('table_name', exmtrans("custom_table.table_name"))->sortable();
         $grid->column('table_view_name', exmtrans("custom_table.table_view_name"))->sortable();
-        $grid->column('order', exmtrans("custom_table.order"))->editable('number')->sortable();
+        $grid->column('order', exmtrans("custom_table.order"))->sortable()->editable();
         
         $grid->tools(function (Grid\Tools $tools) {
             $tools->disableBatchActions();
@@ -112,6 +114,11 @@ class CustomTableController extends AdminControllerBase
         // filter table --------------------------------------------------
         CustomTable::filterList($grid->model(), ['getModel' => false]);
 
+        $grid->filter(function ($filter) {
+            $filter->like('table_name', exmtrans("custom_table.table_name"));
+            $filter->like('table_view_name', exmtrans("custom_table.table_view_name"));
+        });
+
         return $grid;
     }
 
@@ -142,7 +149,7 @@ class CustomTableController extends AdminControllerBase
 
         $form->exmheader(exmtrans('common.detail_setting'))->hr();
 
-        $form->embeds('options', exmtrans("custom_column.options.header"), function ($form) use ($id) {
+        $form->embeds('options', exmtrans("custom_column.options.header"), function ($form) {
             $form->color('color', exmtrans("custom_table.color"))->help(exmtrans("custom_table.help.color"));
             $form->icon('icon', exmtrans("custom_table.icon"))->help(exmtrans("custom_table.help.icon"));
             $form->switchbool('search_enabled', exmtrans("custom_table.search_enabled"))->help(exmtrans("custom_table.help.search_enabled"))->default("1")
@@ -223,7 +230,7 @@ class CustomTableController extends AdminControllerBase
             // if edit mode
             if ($id != null) {
                 $model = CustomTable::getEloquent($id);
-                $tools->append((new Tools\CustomTableMenuButton('table', $model, 'default_setting'))->render());
+                $tools->append((new Tools\CustomTableMenuButton('table', $model, 'default_setting')));
             }
         });
         
@@ -231,7 +238,7 @@ class CustomTableController extends AdminControllerBase
             $this->exists = $form->model()->exists;
         });
 
-        $form->savedInTransaction(function (Form $form) use ($id) {
+        $form->savedInTransaction(function (Form $form) {
             // create or drop index --------------------------------------------------
             $model = $form->model();
             // if has value 'add_parent_menu', add menu
@@ -241,7 +248,10 @@ class CustomTableController extends AdminControllerBase
             $this->addNotifyAfterSaved($model);
         });
 
-        $form->saved(function (Form $form) use ($id) {
+        if ($id != null) {
+            $form->disableEditingCheck(false);
+        }
+        $form->saved(function (Form $form) {
             // create or drop index --------------------------------------------------
             $model = $form->model();
             $model->createTable();
@@ -262,7 +272,7 @@ class CustomTableController extends AdminControllerBase
     /**
      * Render `delete` button.
      *
-     * @return string
+     * @return ?string
      */
     protected function confirmDeleteButton($id = null)
     {
@@ -333,6 +343,19 @@ HTML;
         $form->ignore('columnmulti');
 
         $custom_table = CustomTable::getEloquent($id);
+        
+        $form->hasManyTable('table_labels', exmtrans("custom_table.custom_column_multi.table_labels"), function ($form) use ($custom_table) {
+            $form->select('table_label_id', exmtrans("custom_table.custom_column_multi.column_target"))->required()
+                ->options($custom_table->getColumnsSelectOptions([
+                    'include_system' => false,
+                ]));
+            
+            $form->hidden('priority')->default(1);
+            $form->hidden('multisetting_type')->default(MultisettingType::TABLE_LABELS);
+        })->setTableColumnWidth(10, 2)
+        ->rowUpDown('priority')
+        ->descriptionHtml(sprintf(exmtrans("custom_table.custom_column_multi.help.table_labels"), getManualUrl('table?id='.exmtrans('custom_table.custom_column_multi.table_labels'))));
+
         $form->hasManyTable('multi_uniques', exmtrans("custom_table.custom_column_multi.uniques"), function ($form) use ($custom_table) {
             $form->select('unique1', exmtrans("custom_table.custom_column_multi.unique1"))->required()
                 ->options($custom_table->getColumnsSelectOptions([
@@ -348,7 +371,7 @@ HTML;
                 ]));
             $form->hidden('multisetting_type')->default(MultisettingType::MULTI_UNIQUES);
         })->setTableColumnWidth(4, 4, 3, 1)
-        ->description(exmtrans("custom_table.custom_column_multi.help.uniques"));
+        ->descriptionHtml(exmtrans("custom_table.custom_column_multi.help.uniques"));
         
 
         $form->hasManyTable('compare_columns', exmtrans("custom_table.custom_column_multi.compare_columns"), function ($form) use ($custom_table) {
@@ -364,27 +387,39 @@ HTML;
                     })->pluck('label', 'id');
                 });
             $form->select('compare_column2_id', exmtrans("custom_table.custom_column_multi.compare_column2_id"))->required()
-                ->options($custom_table->getColumnsSelectOptions([
+                ->options($this->getColumnsSelectOptions($custom_table, [
                     'include_system' => false,
                 ]));
             $form->hidden('multisetting_type')->default(MultisettingType::COMPARE_COLUMNS);
         })->setTableColumnWidth(4, 3, 4, 1)
-        ->description(exmtrans("custom_table.custom_column_multi.help.compare_columns"));
+        ->descriptionHtml(exmtrans("custom_table.custom_column_multi.help.compare_columns"));
         
+        
+        // if not master, share setting
+        if (!in_array($custom_table->table_name, SystemTableName::SYSTEM_TABLE_NAME_MASTER())) {
+            $manualUrl = getManualUrl('table#' . exmtrans('custom_table.custom_column_multi.share_settings'));
+            $form->hasManyTable('share_settings', exmtrans("custom_table.custom_column_multi.share_settings"), function ($form) use ($custom_table) {
+                $form->multipleSelect('share_trigger_type', exmtrans("custom_table.custom_column_multi.share_trigger_type"))->required()
+                    ->options(ShareTrigger::transKeyArray("custom_table.custom_column_multi.share_trigger_type_options"));
+                $form->select('share_column_id', exmtrans("custom_table.custom_column_multi.share_column_id"))->required()
+                    ->options($custom_table->getUserOrgColumnsSelectOptions(['index_enabled_only' => false]));
+                $form->select('share_permission', exmtrans("custom_table.custom_column_multi.share_permission"))->required()
+                    ->options(SharePermission::transKeyArray("custom_table.custom_column_multi.share_permission_options"));
+                $form->hidden('multisetting_type')->default(MultisettingType::SHARE_SETTINGS);
+            })->setTableColumnWidth(3, 5, 3, 1)
+            ->descriptionHtml(exmtrans("custom_table.custom_column_multi.help.share_settings") . '<br/>' . exmtrans('common.help.more_help_here', $manualUrl));
+        }
 
-        $form->hasManyTable('table_labels', exmtrans("custom_table.custom_column_multi.table_labels"), function ($form) use ($custom_table) {
-            $form->select('table_label_id', exmtrans("custom_table.custom_column_multi.column_target"))->required()
-                ->options($custom_table->getColumnsSelectOptions([
-                    'include_system' => false,
-                ]));
-            
-            $form->hidden('priority')->default(1);
-            $form->hidden('multisetting_type')->default(MultisettingType::TABLE_LABELS);
-        })->setTableColumnWidth(10, 2)
-        ->rowUpDown('priority')
-        ->description(sprintf(exmtrans("custom_table.custom_column_multi.help.table_labels"), getManualUrl('table?id='.exmtrans('custom_table.custom_column_multi.table_labels'))));
 
-        $form->embeds('options', exmtrans("custom_table.custom_column_multi.options_label"), function ($form) {
+        $form->embeds('options', exmtrans("custom_table.custom_column_multi.options_label"), function ($form) use ($custom_table) {
+            if (!in_array($custom_table->table_name, SystemTableName::SYSTEM_TABLE_NAME_MASTER())) {
+                $manualUrl = getManualUrl('table#' . exmtrans('custom_table.custom_column_multi.share_settings'));
+                $form->switchbool('share_setting_sync', exmtrans("custom_table.custom_column_multi.share_setting_sync"))
+                    ->help(exmtrans("custom_table.custom_column_multi.help.share_setting_sync") . exmtrans('common.help.more_help_here', $manualUrl))
+                    ->default('0')
+                ;
+            }
+
             $form->checkbox('form_action_disable_flg', exmtrans("custom_table.custom_column_multi.form_action_disable_flg"))
                 ->help(exmtrans("custom_table.custom_column_multi.help.form_action_disable_flg"))
                 ->options(FormActionType::transArray('custom_table.custom_column_multi.form_action_options'))
@@ -402,14 +437,39 @@ HTML;
             // if edit mode
             if ($id != null) {
                 $model = CustomTable::getEloquent($id);
-                $tools->append((new Tools\CustomTableMenuButton('table', $model, 'expand_setting'))->render());
+                $tools->append((new Tools\CustomTableMenuButton('table', $model, 'expand_setting')));
             }
         });
-        
+
+        $form->disableEditingCheck(false);
+        $form->saved(function (Form $form) {
+            if (request()->get('after-save') != '1') {
+                return;
+            }
+
+            $model = $form->model();
+            admin_toastr(trans('admin.update_succeeded'));
+            return redirect(admin_urls_query('table', $model->id, 'edit', ['columnmulti' => 1, 'after-save' => 1]));
+        });
 
         return $form;
     }
-    
+
+    /**
+     * get columns select options.include system date
+     * @param CustomTable $custom_table
+     * @param array $selectOptions
+     * @param array items
+     */
+    protected function getColumnsSelectOptions($custom_table, $selectOptions = [])
+    {
+        $options = collect(CompareColumnType::transArray('custom_table.custom_column_multi.compare_column_options'))
+            ->mapWithKeys(function ($val, $key) {
+                return [$key => "**{$val}"];
+            })->toArray();
+        return $options + $custom_table->getColumnsSelectOptions($selectOptions);
+    }
+
     /**
      * Edit interface.
      *
@@ -512,46 +572,33 @@ HTML;
         $notify->notify_view_name = exmtrans('notify.notify_trigger_options.create_update_data');
         $notify->notify_trigger = NotifyTrigger::CREATE_UPDATE_DATA;
         $notify->custom_table_id = $model->id;
-        $notify->notify_actions = NotifyAction::SHOW_PAGE;
+        $notify->mail_template_id = $mail_template_id;
         $notify->trigger_settings = [
             'notify_saved_trigger' =>  NotifySavedType::arrays()
         ];
-        $notify->action_settings = [
-            'mail_template_id' => $mail_template_id,
+        $notify->action_settings = [[
+            'notify_action' => NotifyAction::SHOW_PAGE,
             'notify_action_target' =>  [NotifyActionTarget::HAS_ROLES]
-        ];
+        ]];
         $notify->save();
     }
 
     /**
      * validate before delete.
+     * @param int|string $id
      */
     protected function validateDestroy($id)
     {
-        // check select_table
-        $child_count = CustomRelation::where('parent_custom_table_id', $id)
-            ->count();
-
-        if ($child_count > 0) {
-            return [
-                'status'  => false,
-                'message' => exmtrans('custom_value.help.relation_error'),
-            ];
-        }
-        // check select_table
-        $column_count = CustomColumn::whereIn('options->select_target_table', [strval($id), intval($id)])
-            ->where('custom_table_id', '<>', $id)
-            ->count();
-
-        if ($column_count > 0) {
-            return [
-                'status'  => false,
-                'message' => exmtrans('custom_value.help.reference_error'),
-            ];
-        }
+        return CustomTable::validateDestroy($id);
     }
+
+    
     /**
      * Showing menu modal
+     *
+     * @param Request $request
+     * @param string|int|null $id
+     * @return Response
      */
     public function menuModal(Request $request, $id)
     {

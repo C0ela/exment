@@ -31,14 +31,12 @@ class CustomValueRule implements Rule
             return true;
         }
 
-
-        if (!is_array($value)) {
-            $value = [$value];
-        }
-
-        $value = array_filter($value);
+        $value = array_filter(stringToArray($value));
 
         foreach ($value as $v) {
+            if (!is_numeric($v)) {
+                return false;
+            }
             // get target table's value (use request session)
             $model = $this->custom_table->getValueModel($v);
             if (!isset($model)) {

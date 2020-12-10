@@ -72,7 +72,7 @@ class ExportImportButton extends ModalTileMenuButton
     /**
      * Set custom table.
      *
-     * @param Grid $grid
+     * @param CustomTable $custom_table
      *
      * @return $this
      */
@@ -117,7 +117,7 @@ class ExportImportButton extends ModalTileMenuButton
             $formats['csv'] = [
                 'label' => 'CSV',
                 'icon' => 'fa-file-o',
-                'attributes' => formatAttributes([
+                'attributes' => \Exment::formatAttributes([
                     'target' => '_blank',
                 ]),
             ];
@@ -126,7 +126,7 @@ class ExportImportButton extends ModalTileMenuButton
             $formats['excel'] = [
                 'label' => 'Excel',
                 'icon' => 'fa-file-excel-o',
-                'attributes' => formatAttributes([
+                'attributes' => \Exment::formatAttributes([
                     'target' => '_blank',
                 ]),
             ];
@@ -188,7 +188,7 @@ class ExportImportButton extends ModalTileMenuButton
                 $button = [
                     'label' => exmtrans('custom_value.export'),
                     'icon' => 'fa-file-o',
-                    'attributes' => formatAttributes([
+                    'attributes' => \Exment::formatAttributes([
                         'target' => '_blank',
                     ]),
                 ];
@@ -202,7 +202,7 @@ class ExportImportButton extends ModalTileMenuButton
                         'icon' => $plugin->getOption('icon') ?? 'fa-th-list',
                         'header' => $all,
                         'description' => $plugin->getOption('export_description'),
-                        'buttons' => [array_merge(['href'=> $this->grid->getExportUrl('all') . "&action=plugin_export&plugin_id={$plugin->id}"], $button)],
+                        'buttons' => [array_merge(['href'=> $this->grid->getExportUrl('all') . "&action=plugin_export&plugin_uuid={$plugin->uuid}"], $button)],
                     ];
                 }
                 if (in_array('current_page', $export_types)) {
@@ -210,7 +210,7 @@ class ExportImportButton extends ModalTileMenuButton
                         'icon' => $plugin->getOption('icon') ?? 'fa-th-list',
                         'header' => $currentPage,
                         'description' => $plugin->getOption('export_description'),
-                        'buttons' => [array_merge(['href'=> $this->grid->getExportUrl('page', $page) . "&action=plugin_export&plugin_id={$plugin->id}"], $button)],
+                        'buttons' => [array_merge(['href'=> $this->grid->getExportUrl('page', $page) . "&action=plugin_export&plugin_uuid={$plugin->uuid}"], $button)],
                     ];
                 }
 
@@ -242,7 +242,7 @@ class ExportImportButton extends ModalTileMenuButton
                                 'label' => exmtrans('common.import'),
                                 'icon' => 'fa-upload',
                                 'url' => '#',
-                                'attributes' => formatAttributes([
+                                'attributes' => \Exment::formatAttributes([
                                     'data-widgetmodal_url' => url_join($this->endpoint, 'importModal')
                                 ]),
                             ]

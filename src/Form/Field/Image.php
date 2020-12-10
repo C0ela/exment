@@ -6,12 +6,18 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class Image extends \Encore\Admin\Form\Field\Image
 {
+    /**
+     *  Validation rules.
+     *
+     * @var array
+     */
+    protected $rules = [];
 
     /**
      * If name already exists, rename it.
      * *override
      *
-     * @param $file
+     * @param UploadedFile $file
      *
      * @return void
      */

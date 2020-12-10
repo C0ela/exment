@@ -2,23 +2,26 @@
 
 namespace Exceedone\Exment\ColumnItems\CustomColumns;
 
-use Encore\Admin\Form\Field;
+use Exceedone\Exment\Form\Field;
 use Exceedone\Exment\Model\File as ExmentFile;
+use Exceedone\Exment\Enums\UrlTagType;
 
 class Image extends File
 {
     /**
      * get html. show link to image
      */
-    public function html()
+    protected function _html($v)
     {
         // get image url
-        $url = ExmentFile::getUrl($this->fileValue());
+        $url = ExmentFile::getUrl($this->fileValue($v));
         if (!isset($url)) {
             return $url;
         }
 
-        return '<a href="'.$url.'" target="_blank"><img src="'.$url.'" class="image_html" /></a>';
+        return \Exment::getUrlTag($url, '<img src="'.$url.'" class="image_html" />', UrlTagType::BLANK, [], [
+            'notEscape' => true,
+        ]);
     }
 
     protected function getAdminFieldClass()
@@ -31,5 +34,12 @@ class Image extends File
         parent::setAdminOptions($field, $form_column_options);
 
         $field->attribute(['accept' => "image/*"]);
+    }
+
+    protected function setValidates(&$validates, $form_column_options)
+    {
+        $validates[] = new \Exceedone\Exment\Validator\ImageRule;
+
+        parent::setValidates($validates, $form_column_options);
     }
 }

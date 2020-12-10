@@ -46,6 +46,7 @@ class PluginMenuButton
         return <<<EOT
 
         $('#menu_button_$uuid').off('click').on('click', function(){
+            let select_ids = $('.column-__row_selector__').length > 0 ? $.admin.grid.selected() : null;
             Exment.CommonEvent.ShowSwal("$url", {
                 title: "$label",
                 text: "$text",
@@ -53,7 +54,8 @@ class PluginMenuButton
                 cancel:"$cancel",
                 data: {
                     uuid:"$uuid",
-                    plugin_type: '$plugin_type'
+                    plugin_type: '$plugin_type',
+                    select_ids: select_ids
                 }
             });
         });
@@ -67,6 +69,17 @@ EOT;
             'custom_table' => $this->custom_table,
             'id' => $this->id,
         ]);
+
+        if (method_exists($pluginClass, 'enableRender') && !$pluginClass->enableRender()) {
+            return null;
+        }
+
+        // if render method has and not null, return.
+        $render = method_exists($pluginClass, 'render') ? $pluginClass->render() : null;
+        if (!is_null($render)) {
+            return $render;
+        }
+
         if (method_exists($pluginClass, 'getButtonLabel')) {
             $label = $pluginClass->getButtonLabel();
         } else {
@@ -96,6 +109,7 @@ EOT;
      */
     public function __toString()
     {
-        return $this->render()->render() ?? '';
+        $render = $this->render();
+        return $render ? $render->render() : '';
     }
 }
